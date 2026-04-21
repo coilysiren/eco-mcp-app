@@ -1,0 +1,64 @@
+{# Rendered output of `explain_eco_item` — one card summarizing a Wikidata /
+   Wikipedia entity. Minimal styling; leans on eco.css tokens for colors. #}
+<div class="ecopedia">
+  <div class="ecopedia-header">
+    <div class="ecopedia-title">
+      <div class="label">Ecopedia</div>
+      <h2 class="ecopedia-name">{{ card.title or card.name }}</h2>
+      {% if card.category %}
+        <div class="ecopedia-category">{{ card.category }}</div>
+      {% endif %}
+    </div>
+    {% if card.image_data_uri %}
+      <img
+        class="ecopedia-image"
+        src="{{ card.image_data_uri }}"
+        alt="{{ card.title or card.name }}"
+      />
+    {% endif %}
+  </div>
+
+  {% if card.not_found and not card.description %}
+    <div class="empty">
+      <strong style="color:var(--warn)">No entry for "{{ card.name }}"</strong>
+      <div class="hint">
+        Nothing on Wikipedia or Wikidata matched. Try a more specific name or
+        pass <code>category</code> (material, plant, animal, mineral, food).
+      </div>
+    </div>
+  {% else %}
+    {% if card.description %}
+      <p class="ecopedia-description">{{ card.description }}</p>
+    {% else %}
+      <p class="ecopedia-description hint">
+        No description available — Wikidata entry found, but its English
+        description is empty.
+      </p>
+    {% endif %}
+
+    {% if card.facts %}
+      <table class="ecopedia-facts">
+        <tbody>
+          {% for label, value in card.facts %}
+            <tr>
+              <th>{{ label }}</th>
+              <td>{{ value }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="hint">No structured facts available for this item.</div>
+    {% endif %}
+  {% endif %}
+
+  <div class="ecopedia-footer">
+    {% if card.source_url %}
+      <a href="{{ card.source_url }}" target="_blank" rel="noreferrer">
+        Source: {{ card.source or "external" }}
+      </a>
+    {% elif card.source %}
+      <span class="hint">Source: {{ card.source }}</span>
+    {% endif %}
+  </div>
+</div>

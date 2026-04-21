@@ -682,6 +682,16 @@ def _format_species_markdown(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_ecopedia(card_dict: dict[str, Any]) -> str:
+    """Render the ecopedia card fragment for `explain_eco_item`."""
+    facts = card_dict.get("facts") or []
+    card_dict = {
+        **card_dict,
+        "facts": [(pair[0], pair[1]) for pair in facts if len(pair) == 2],
+    }
+    return _JINJA.get_template("partials/ecopedia_card.html").render(card=card_dict)
+
+
 def _render_shell(prerendered: str | None = None) -> str:
     """Render the iframe shell — what the MCP resource returns.
 
@@ -1303,6 +1313,48 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             ),
             Tool(
+                name="explain_eco_item",
+                title="Eco — explain item (Wikidata + Wikipedia)",
+                description=(
+                    "Look up any Eco item (material, plant, animal, mineral, or "
+                    "food) on Wikidata and Wikipedia and render a card with an "
+                    "image, short description, and category-specific facts. Use "
+                    "`category` to disambiguate (e.g. `name='Iron', category="
+                    "'material'` pins to the chemical element rather than any "
+                    "mythological figure sharing the name). All results are "
+                    "cached locally for 7 days."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": (
+                                "Name of the item to look up (e.g. 'Iron', 'Oak', "
+                                "'Bison', 'Wheat', 'Quartz')."
+                            ),
+                        },
+                        "category": {
+                            "type": "string",
+                            "description": (
+                                "Optional disambiguation. One of: material, "
+                                "plant, animal, mineral, food."
+                            ),
+                            "enum": [
+                                "material",
+                                "plant",
+                                "animal",
+                                "mineral",
+                                "food",
+                            ],
+                        },
+                    },
+                    "required": ["name"],
+                    "additionalProperties": False,
+                },
+                **{"_meta": UI_META},
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -1342,6 +1394,44 @@ def build_server() -> Server:
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
+        if name == "explain_eco_item":
+            from .wikidata import build_ecopedia_card
+
+            item_name = (arguments or {}).get("name", "").strip() if arguments else ""
+            category = (arguments or {}).get("category") if arguments else None
+            if not item_name:
+                err = "`name` is required (e.g. 'Iron', 'Oak', 'Bison')."
+                return CallToolResult(
+                    content=[TextContent(type="text", text=err)],
+                    isError=True,
+                )
+            card = await build_ecopedia_card(item_name, category)
+            card_dict = card.to_dict()
+            # Markdown fallback for hosts that don't render the iframe.
+            md_lines = [f"**{card.title or card.name}**"]
+            if card.category:
+                md_lines[0] += f" — _{card.category}_"
+            if card.description:
+                md_lines.append("")
+                md_lines.append(card.description)
+            if card.facts:
+                md_lines.append("")
+                for label, value in card.facts:
+                    md_lines.append(f"- **{label}**: {value}")
+            if card.source_url:
+                md_lines.append("")
+                md_lines.append(f"Source: {card.source_url}")
+            if card.not_found and not card.description:
+                md_lines = [f"No Wikipedia / Wikidata entry found for '{card.name}'."]
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text="\n".join(md_lines)),
+                    TextContent(type="text", text=json.dumps(card_dict)),
+                    TextContent(type="text", text=HTMX_PREFIX + _render_ecopedia(card_dict)),
+                ],
+                **{"_meta": UI_META},
+            )
+
         if name == "list_public_eco_servers":
             lines = ["**Known public Eco servers:**", ""]
             for s in KNOWN_PUBLIC_SERVERS:

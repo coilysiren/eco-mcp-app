@@ -356,3 +356,55 @@
     background: rgba(0, 0, 0, 0.2); }
   .species-links { font-size: 12px; }
   .species-links a { color: var(--leaf-bright); }
+
+  /* ---- ecopedia card (explain_eco_item) ---- */
+  .ecopedia {
+    position: relative; z-index: 2;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-top: 20px;
+    color: var(--fg);
+  }
+  .ecopedia-header {
+    display: flex; gap: 18px; align-items: flex-start;
+    justify-content: space-between;
+  }
+  .ecopedia-title .label {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--leaf-bright); font-weight: 700;
+  }
+  .ecopedia-name { margin: 4px 0 2px; font-size: 22px; font-weight: 700; }
+  .ecopedia-category {
+    font-size: 12px; color: var(--fg-muted);
+    text-transform: capitalize;
+  }
+  .ecopedia-image {
+    max-width: 160px; max-height: 160px; border-radius: 8px;
+    object-fit: cover; border: 1px solid var(--panel-border);
+    background: rgba(0, 0, 0, 0.25);
+  }
+  .ecopedia-description { margin: 14px 0 10px; color: var(--fg); }
+  .ecopedia-description.hint { color: var(--fg-muted); font-style: italic; }
+  .ecopedia-facts {
+    width: 100%; border-collapse: collapse; margin-top: 8px;
+    font-size: 13px;
+  }
+  .ecopedia-facts th, .ecopedia-facts td {
+    padding: 6px 10px; text-align: left;
+    border-bottom: 1px dashed rgba(165, 209, 74, 0.15);
+  }
+  .ecopedia-facts th {
+    color: var(--leaf-bright); font-weight: 600;
+    width: 40%;
+  }
+  .ecopedia-facts td { color: var(--fg); }
+  .ecopedia-footer {
+    margin-top: 12px; font-size: 12px; color: var(--fg-muted);
+  }
+  .ecopedia-footer a {
+    color: var(--leaf-bright); text-decoration: none;
+    border-bottom: 1px dotted rgba(165, 209, 74, 0.55);
+  }
+  .ecopedia-footer a:hover { color: #c7e87a; }

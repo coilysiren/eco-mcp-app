@@ -10,3 +10,6 @@ build/
 .envrc
 .env
 *.log
+
+# Agent/Claude isolated worktrees — each is a separate embedded git clone.
+.claude/worktrees/

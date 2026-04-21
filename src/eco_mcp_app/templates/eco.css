@@ -279,3 +279,24 @@
   .credits-line a:hover { color: #c7e87a;
     border-bottom-color: #c7e87a; }
   .credits-line .sep { color: rgba(165, 209, 74, 0.4); }
+
+  /* Species profile card (get_eco_species tool). */
+  .species-card { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+  .species-header { display: flex; gap: 14px; align-items: flex-start; }
+  .species-photo { width: 120px; height: 120px; object-fit: cover;
+    border-radius: 8px; border: 1px solid rgba(165, 209, 74, 0.25);
+    background: rgba(0, 0, 0, 0.25); flex-shrink: 0; }
+  .species-photo--missing { display: flex; align-items: center; justify-content: center;
+    color: var(--fg-muted); font-size: 12px; }
+  .species-title { flex: 1; min-width: 0; }
+  .species-extract { margin: 0; color: var(--fg); font-size: 13px; line-height: 1.45; }
+  .species-taxonomy { font-size: 12px; color: var(--fg-muted); }
+  .species-tax-step { color: var(--leaf-bright); }
+  .species-tax-sep { color: rgba(165, 209, 74, 0.4); }
+  .species-conservation { font-size: 13px; color: var(--warn, #e0b75c); }
+  .species-pop { margin-top: 4px; }
+  .species-spark { display: block; margin-top: 6px;
+    border: 1px solid rgba(165, 209, 74, 0.18); border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2); }
+  .species-links { font-size: 12px; }
+  .species-links a { color: var(--leaf-bright); }

@@ -1,3 +1,7 @@
 dns-name: eco-mcp.coilysiren.me
 email: coilysiren@gmail.com
 name: coilysiren/eco-mcp-app
+# Default Eco server to query when a caller doesn't pass `server` at tool time.
+eco-info-url: http://eco.coilysiren.me:3001/info
+# Default port the FastAPI / Streamable-HTTP app binds to locally and in-container.
+port: 4000

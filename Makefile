@@ -5,6 +5,8 @@ DEFAULT_GOAL := help
 dns-name ?= $(shell cat config.yml | yq e '.dns-name')
 email ?= $(shell cat config.yml | yq e '.email')
 name ?= $(shell cat config.yml | yq e '.name')
+port ?= $(shell cat config.yml | yq e '.port')
+eco-info-url ?= $(shell cat config.yml | yq e '.eco-info-url')
 name-dashed ?= $(subst /,-,$(name))
 git-hash ?= $(shell git rev-parse HEAD)
 image-url ?= ghcr.io/$(name)/$(name-dashed):$(git-hash)
@@ -81,12 +83,12 @@ deploy-secrets-docker-repo:
 ## deploy the application to the cluster
 deploy: publish .deploy
 
-## run project on your plain old machine (HTTP transport on :4000)
+## run project on your plain old machine (HTTP transport on $(port))
 #  see also: run-docker
 run-native:
-	uv run uvicorn eco_mcp_app.http_app:app --reload --port 4000 --host 0.0.0.0
+	uv run uvicorn eco_mcp_app.http_app:app --reload --port $(port) --host 0.0.0.0
 
 ## run project inside of a docker container
 #  see also: run-native
 run-docker:
-	docker run --expose 4000 -p 4000:4000 -it --rm $(name):latest
+	docker run --expose $(port) -p $(port):$(port) -it --rm $(name):latest

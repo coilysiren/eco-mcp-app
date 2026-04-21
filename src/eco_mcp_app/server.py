@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -20,6 +21,7 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader, PackageLoader, select_autoescape
+from markupsafe import Markup, escape
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.models import InitializationOptions
@@ -50,6 +52,86 @@ UI_META: dict[str, Any] = {
 # fragment, so the iframe JS can find it without mistaking the markdown
 # fallback or the JSON payload for the render source.
 HTMX_PREFIX = "HTMX:"
+
+
+# Eco server descriptions use TextMeshPro-style rich-text markup (the game is
+# built in Unity). Public servers routinely ship titles like
+#   "<color=green>Eco</color> via <color=blue>Sirens</color> | Cycle 13 ..."
+# and also `<b>`, `<i>`, `<size=20>`, `<sprite name="...">`, `<icon name="...">`
+# etc. We only translate <color=...> into inline-styled spans (since that's
+# the only tag that carries visible meaning in a plain-text card); everything
+# else is stripped. Contents are always escape-then-interpolated so the output
+# stays XSS-safe even though it's marked Markup.
+_TMP_TOKEN = re.compile(r"<color=#?([A-Za-z0-9]+)>|</color>", re.IGNORECASE)
+_TMP_OTHER_TAG = re.compile(
+    r"</?(?:b|i|u|s|size|sprite|icon|style|mark|lowercase|uppercase|smallcaps)"
+    r"(?:\s[^>]*)?/?>",
+    re.IGNORECASE,
+)
+
+# Map TMP named colors to CSS colors. Unknown names pass through so CSS named
+# colors work directly; hex values are handled by prefixing `#` if missing.
+_TMP_NAMED_COLORS = {
+    "black",
+    "white",
+    "red",
+    "green",
+    "blue",
+    "yellow",
+    "cyan",
+    "magenta",
+    "gray",
+    "grey",
+    "orange",
+    "purple",
+    "pink",
+    "brown",
+    "lightblue",
+    "lightgreen",
+    "lightyellow",
+    "darkblue",
+    "darkgreen",
+    "darkred",
+    "darkgray",
+    "darkgrey",
+}
+
+
+def format_eco_markup(text: str | None) -> Markup:
+    """Convert Eco / Unity TextMeshPro markup to safe HTML.
+
+    Keeps <color=...>…</color> as styled spans; strips all other TMP tags.
+    Single-pass tokenizer so close tags are handled as tags (not literals) and
+    unbalanced markup doesn't leak `</color>` into the output.
+    """
+    if not text:
+        return Markup("")
+    # Drop the tags we don't render. Do this before coloring so stripped tags
+    # can't nest inside color spans in weird ways.
+    text = _TMP_OTHER_TAG.sub("", text)
+    out: list[str] = []
+    depth = 0
+    pos = 0
+    for m in _TMP_TOKEN.finditer(text):
+        out.append(str(escape(text[pos : m.start()])))
+        raw_open = m.group(1)
+        if raw_open is not None:
+            if raw_open.lower() in _TMP_NAMED_COLORS:
+                color = raw_open.lower()
+            elif re.fullmatch(r"[0-9a-fA-F]{3,8}", raw_open):
+                color = f"#{raw_open}"
+            else:
+                color = raw_open.lower()
+            out.append(f'<span style="color:{escape(color)}">')
+            depth += 1
+        else:  # </color>
+            if depth > 0:
+                out.append("</span>")
+                depth -= 1
+        pos = m.end()
+    out.append(str(escape(text[pos:])))
+    out.extend(["</span>"] * depth)
+    return Markup("".join(out))
 
 
 def _fmt_number(n: Any) -> str:
@@ -225,7 +307,9 @@ def _render_card(payload: dict[str, Any]) -> str:
         except ValueError:
             fetched_at = payload["fetchedAtISO"]
     ctx = {
-        "title": server.get("description") or server.get("category") or "Eco server",
+        "title": format_eco_markup(
+            server.get("description") or server.get("category") or "Eco server"
+        ),
         "server": server,
         "players": players,
         "world": world,

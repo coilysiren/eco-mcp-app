@@ -3,6 +3,34 @@ kind: Namespace
 metadata:
   name: ${NAME}
 ---
+# GHCR pull-secret, synced declaratively from AWS SSM via the cluster's
+# external-secrets operator. `/github/pat` is the shared PAT for ghcr.io/coilysiren
+# and lives in AWS SSM Parameter Store (encrypted). ESO renders it into a
+# kubernetes.io/dockerconfigjson secret — no manual kubectl create, no PAT
+# materializing anywhere outside the cluster.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: docker-registry
+  namespace: ${NAME}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-parameter-store
+    kind: ClusterSecretStore
+  target:
+    name: docker-registry
+    creationPolicy: Owner
+    template:
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: |
+          {"auths":{"ghcr.io":{"auth":"{{ printf "coilysiren:%s" .pat | b64enc }}"}}}
+  data:
+    - secretKey: pat
+      remoteRef:
+        key: /github/pat
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,10 +47,8 @@ spec:
       labels:
         app: ${NAME}-app
     spec:
-      # The GHCR package is public (repo is public), so no pull-secret needed.
-      # If you flip it to private, add: imagePullSecrets: [{name: docker-registry}]
-      # and run `make deploy-secrets-docker-repo` once to seed the pull-secret
-      # from the GitHub PAT stored in `aws ssm /github/pat`.
+      imagePullSecrets:
+        - name: docker-registry
       containers:
         - name: ${NAME}
           image: ${IMAGE}

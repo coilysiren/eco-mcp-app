@@ -92,6 +92,27 @@ Then fully quit Claude Desktop (⌘Q) and relaunch. In a fresh chat:
 
 You should get the meteor card inline.
 
+## Try it on other public Eco servers
+
+The tool and the `/preview` dev route both accept a `server` argument — host,
+`host:port`, or a full `/info` URL — so the same card UI works against any
+public Eco server. Useful for eyeballing rendering against real-world titles
+(TextMeshPro color markup, missing cards, stale meteor cycles, etc.). Server
+list is from [eco-servers.org](http://eco-servers.org/).
+
+| Server | Live | Local |
+|---|---|---|
+| **Eco via Sirens** (default, this repo) | [preview](https://eco-mcp.coilysiren.me/preview) | [preview](http://localhost:4000/preview) |
+| **AWLGaming** — hex + named color mix, meteor imminent | [preview](https://eco-mcp.coilysiren.me/preview?server=ecoserver.awlgaming.net:5679) | [preview](http://localhost:4000/preview?server=ecoserver.awlgaming.net:5679) |
+| **GreenLeaf Prime** — `<#RRGGBB>` shorthand rainbow | [preview](https://eco-mcp.coilysiren.me/preview?server=eco.greenleafserver.com:3021) | [preview](http://localhost:4000/preview?server=eco.greenleafserver.com:3021) |
+| **GreenLeaf Vanilla** — same host, vanilla ruleset | [preview](https://eco-mcp.coilysiren.me/preview?server=eco.greenleafserver.com:3031) | [preview](http://localhost:4000/preview?server=eco.greenleafserver.com:3031) |
+| **The Dao Kingdom** — short-form hex + explicit `</color>` closes | [preview](https://eco-mcp.coilysiren.me/preview?server=daokingdom.eu:3001) | [preview](http://localhost:4000/preview?server=daokingdom.eu:3001) |
+| **Peaceful Utopia** — no markup, meteor already passed | [preview](https://eco-mcp.coilysiren.me/preview?server=eco.bleedcraft.com:3001) | [preview](http://localhost:4000/preview?server=eco.bleedcraft.com:3001) |
+
+Local variants expect `inv http` (or the project's SessionStart hook) to be
+running on `:4000`. `/info` is served on `game_port + 1`, so `:3000` game
+servers advertise `/info` on `:3001` — the links above use the `/info` port.
+
 ## Deploy (homelab)
 
 Target: `eco-mcp.coilysiren.me` on the k3s cluster, following the template in

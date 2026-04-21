@@ -23,11 +23,16 @@
     --sky: #4fc3f7;
     --warn: #ffb74d;
   }
+  /* Claude.ai sandbox iframe reads `documentElement.height` directly and ignores
+     ui/notifications/size-changed (claude-ai-mcp#69). So `100vh` creates a
+     circular dependency: iframe viewport=0 → 100vh=0 → we report 0 → iframe
+     stays 0. Use a fixed min-height and also explicitly set the
+     documentElement height in JS after every render. */
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--fg);
     font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
     font-size: 14px; line-height: 1.45; overflow-x: hidden; }
-  body { min-height: 100vh; position: relative; }
+  body { min-height: 520px; position: relative; }
 
   /* ---- starfield ---- */
   .sky {
@@ -219,6 +224,19 @@
 
 <script>
 (() => {
+  // ---- iframe sizing (claude-ai-mcp#69 workaround) ----
+  // Claude.ai reads documentElement.height directly from the iframe DOM.
+  // Set it explicitly after every render; also observe body size so it updates
+  // when content changes (e.g. when tool-result swaps the empty state for the
+  // full dashboard).
+  function syncHeight() {
+    const h = Math.max(document.body.scrollHeight, 520);
+    document.documentElement.style.height = h + "px";
+  }
+  const sizeObs = new ResizeObserver(syncHeight);
+  sizeObs.observe(document.body);
+  syncHeight();
+
   // ---- starfield ----
   const sky = document.getElementById("sky");
   for (let i = 0; i < 80; i++) {
@@ -265,9 +283,12 @@
   });
 
   async function connect() {
+    console.log("[eco-mcp-app] sending ui/initialize");
     try {
-      await request("ui/initialize", { protocolVersion: PROTO_VERSION, capabilities: {} });
+      const r = await request("ui/initialize", { protocolVersion: PROTO_VERSION, capabilities: {} });
+      console.log("[eco-mcp-app] ui/initialize ok:", r);
       send({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      console.log("[eco-mcp-app] initialized; waiting for ui/notifications/tool-result");
     } catch (e) {
       console.error("[eco-mcp-app] ui/initialize failed:", e);
     }
@@ -388,6 +409,7 @@
         el.style.setProperty("--w", "0%");
         requestAnimationFrame(() => el.style.setProperty("--w", w));
       });
+      syncHeight();  // content just changed; re-measure
     });
   }
 

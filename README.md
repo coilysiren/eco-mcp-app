@@ -160,7 +160,7 @@ Claude Desktop after editing — it only loads MCPs at startup.**
 ```json
 {
   "mcpServers": {
-    "eco": {
+    "eco-mcp-app": {
       "command": "uvx",
       "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"]
     }
@@ -175,7 +175,7 @@ Claude Desktop after editing — it only loads MCPs at startup.**
 ```json
 {
   "mcpServers": {
-    "eco": {
+    "eco-mcp-app": {
       "command": "uv",
       "args": ["run", "--directory", "/path/to/eco-mcp-app", "eco-mcp-app"]
     }
@@ -207,7 +207,7 @@ merge into your user-wide MCP config:
 ```json
 {
   "mcpServers": {
-    "eco": {
+    "eco-mcp-app": {
       "command": "uvx",
       "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"]
     }
@@ -220,7 +220,7 @@ merge into your user-wide MCP config:
 <summary>Remote HTTP (hosted)</summary>
 
 ```sh
-claude mcp add --transport http eco https://eco-mcp.coilysiren.me/mcp/
+claude mcp add --transport http eco-mcp-app https://eco-mcp.coilysiren.me/mcp/
 ```
 </details>
 
@@ -236,7 +236,7 @@ These all read an `mcpServers` map — same shape as Claude Desktop. Path:
 ```json
 {
   "mcpServers": {
-    "eco": {
+    "eco-mcp-app": {
       "command": "uvx",
       "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"]
     }
@@ -251,7 +251,7 @@ These all read an `mcpServers` map — same shape as Claude Desktop. Path:
 ```json
 {
   "context_servers": {
-    "eco": {
+    "eco-mcp-app": {
       "command": {
         "path": "uvx",
         "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"]
@@ -268,7 +268,7 @@ Set `ECO_INFO_URL` to point the default query at your own Eco server:
 ```json
 {
   "mcpServers": {
-    "eco": {
+    "eco-mcp-app": {
       "command": "uvx",
       "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"],
       "env": {
@@ -285,7 +285,7 @@ Callers can still pass a `server` argument per-tool-call to override.
 
 In a fresh chat, after any install method:
 
-> *Use eco to show me the Eco server status.*
+> *Use eco-mcp-app to show me the Eco server status.*
 
 You should get the meteor card inline in Claude Desktop, or a markdown
 summary everywhere else.

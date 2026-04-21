@@ -7,6 +7,22 @@
       "runtimeArgs": ["-m", "http.server", "8765"],
       "port": 8765,
       "url": "/static/harness.html"
+    },
+    {
+      "name": "eco-http",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "eco_mcp_app.http_app:app",
+        "--reload",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "4000"
+      ],
+      "port": 4000,
+      "url": "/preview"
     }
   ]
 }

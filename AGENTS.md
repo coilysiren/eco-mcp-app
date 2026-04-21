@@ -50,6 +50,7 @@ This project depends on the user's Eco (Strange Loop Games) repo ecosystem, whic
 | Dir | Visibility | Purpose |
 |---|---|---|
 | `backend` | public | The canonical deploy template for k3s + GHCR + Tailscale + cert-manager. `Dockerfile` / `Makefile` / `deploy/main.yml` / `.github/workflows/build-and-publish.yml` in this repo were cloned from there. |
+| `kai-server` | public | Claude-driver repo for the homelab k3s box (`ssh kai@kai-server`, Tailscale `100.69.164.66`). Documents the readonly kubectl wrapper, the GH Actions → cluster path, the secrets/external-secrets + cert-manager setup, and why Claude *can't* run write-kubectl directly. Read this before troubleshooting a deploy. |
 | `eco-cycle-prep` | public | Per-cycle setup (worldgen, Discord announcements, mod sync). Pyinvoke-driven, same pattern as this repo's `tasks.py`. |
 | `eco-mods` | private | Third-party mods installed on the user's private Eco server + configs. C#. |
 | `eco-mods-public` | public | User's own C# mods (BunWulf family + others). |

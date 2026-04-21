@@ -1,0 +1,13 @@
+<div class="footer">
+  <span>
+    Fetched {{ fetched_at }}
+    {%- if achievements_count %} · {{ achievements_count }} achievements{% endif %}
+    {%- if source_url %} · <code>{{ source_url }}</code>{% endif %}
+  </span>
+  <div class="footer-actions">
+    {% if server.discord %}
+      <a class="cta discord" href="{{ server.discord }}" target="_blank" rel="noopener">Join Discord →</a>
+    {% endif %}
+    <a class="cta steam" href="{{ steam_url }}" target="_blank" rel="noopener">Eco on Steam ↗</a>
+  </div>
+</div>

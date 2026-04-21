@@ -1,0 +1,18 @@
+{% if has_meteor %}
+<div class="hero">
+  <div class="hero-left">
+    <div class="label">Days until meteor ☄</div>
+    <div>
+      <span class="big-num">{{ cycle.daysUntilMeteor }}</span>
+      <span class="unit">days</span>
+    </div>
+    <div class="note">
+      Server running for {{ cycle.daysRunning or "?" }} days
+      · {{ meteor_pct | round | int }}% through the cycle
+    </div>
+  </div>
+  <div class="ring" style="--p:{{ '%.1f' % meteor_pct }}">
+    <div class="ring-label"><b>{{ cycle.daysUntilMeteor }}</b>left</div>
+  </div>
+</div>
+{% endif %}

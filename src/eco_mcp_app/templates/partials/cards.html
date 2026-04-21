@@ -1,0 +1,63 @@
+{% set cards = [] %}
+{% if any(players.online, players.total, players.peakActive, players.activeAndOnline) %}
+  {% set _ = cards.append("players") %}
+{% endif %}
+{% if any(world.size, world.plants, world.animals, world.laws) %}
+  {% set _ = cards.append("world") %}
+{% endif %}
+{% if has_meteor %}
+  {% set _ = cards.append("cycle") %}
+{% endif %}
+{% if any(economy.description, world.totalCulture) %}
+  {% set _ = cards.append("economy") %}
+{% endif %}
+
+{% if cards %}
+<div class="grid">
+  {% if "players" in cards %}
+  <div class="card">
+    <div class="card-label">Players online</div>
+    <div class="card-val">{{ players.online or 0 }} / {{ players.total or "?" }}</div>
+    <div class="card-sub">
+      peak {{ players.peakActive or 0 }} · {{ players.activeAndOnline or 0 }} active today
+    </div>
+    {% if players.total and players.total > 0 %}
+      <div class="bar"><span style="--w:{{ '%.1f' % player_pct }}%"></span></div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if "world" in cards %}
+  {% set bits = [] %}
+  {% if world.plants %}{% set _ = bits.append(fmt(world.plants) ~ " plants") %}{% endif %}
+  {% if world.animals %}{% set _ = bits.append(fmt(world.animals) ~ " animals") %}{% endif %}
+  {% if world.laws is not none %}{% set _ = bits.append((world.laws|string) ~ (" law" if world.laws == 1 else " laws")) %}{% endif %}
+  <div class="card">
+    <div class="card-label">World</div>
+    <div class="card-val">{{ world.size or "—" }}</div>
+    <div class="card-sub">{{ bits|join(" · ") or "&nbsp;" | safe }}</div>
+  </div>
+  {% endif %}
+
+  {% if "cycle" in cards %}
+  <div class="card meteor-card">
+    <div class="card-label">Cycle progress</div>
+    <div class="card-val">day {{ cycle.daysRunning or "?" }}</div>
+    <div class="card-sub">{{ cycle.daysUntilMeteor }}d until meteor</div>
+    <div class="bar"><span style="--w:{{ '%.1f' % meteor_pct }}%"></span></div>
+  </div>
+  {% endif %}
+
+  {% if "economy" in cards %}
+  <div class="card">
+    <div class="card-label">Economy &amp; culture</div>
+    <div class="card-val">{{ economy.description or "—" }}</div>
+    <div class="card-sub">
+      {% if world.totalCulture is not none %}
+        {{ '%.1f' % world.totalCulture }} culture points
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}

@@ -1,0 +1,18 @@
+<div class="banner-wrap">
+  <a href="{{ steam_url }}" target="_blank" rel="noopener"
+     title="Eco on Steam — Strange Loop Games">
+    <img src="{{ banner_src }}" alt="Eco on Steam">
+    <div class="banner-overlay">
+      <div class="banner-title">{{ title }}</div>
+      <div class="banner-sub">
+        {{ server.category or "Server" }}
+        {%- if cycle.daysRunning is not none %} · day {{ cycle.daysRunning }}{% endif %}
+        {%- if cycle.collaboration %} · {{ cycle.collaboration }}{% endif %}
+        {%- if cycle.gameSpeed %} · {{ cycle.gameSpeed }}{% endif %}
+      </div>
+    </div>
+    <span class="banner-badge {{ 'warn' if server.paused else '' }}">
+      <span class="dot"></span>{{ "paused" if server.paused else "online" }}
+    </span>
+  </a>
+</div>

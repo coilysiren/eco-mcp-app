@@ -1,0 +1,6 @@
+<div class="chips">
+  {% if server.version %}<span class="chip">v {{ server.version }}</span>{% endif %}
+  {% if server.language %}<span class="chip">{{ server.language }}</span>{% endif %}
+  <span class="chip">{{ "password" if server.hasPassword else "open" }}</span>
+  {% if server.adminOnline %}<span class="chip">admin online</span>{% endif %}
+</div>

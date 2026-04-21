@@ -12,6 +12,7 @@ dependencies = [
   "invoke>=3.0.3",
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",
+  "jinja2>=3.1.0",
 ]
 
 [project.scripts]
@@ -28,7 +29,7 @@ build-backend = "hatchling.build"
 packages = ["src/eco_mcp_app"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/eco_mcp_app/ui/eco.html" = "eco_mcp_app/ui/eco.html"
+"src/eco_mcp_app/templates" = "eco_mcp_app/templates"
 
 [tool.ruff]
 line-length = 100

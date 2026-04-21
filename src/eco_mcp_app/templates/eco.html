@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" style="height:780px">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Eco — server status</title>
+{# Claude.ai reads inline documentElement.style.height (claude-ai-mcp#69).
+   Set it in the markup so the host snapshots 780px before our JS runs. #}
+<script>document.documentElement.style.height="780px";</script>
+<style>{% include "eco.css" %}</style>
+<script src="{{ htmx_src }}"></script>
+</head>
+<body>
+  <div class="leaves"></div>
+  <div class="shell" id="root">
+    {% include "partials/empty.html" %}
+  </div>
+
+<script>
+(() => {
+  // ---- iframe sizing ----
+  // Claude Desktop observes ui/notifications/size-changed for iframe height,
+  // not documentElement.height despite claude-ai-mcp#69. Mirrors the ext-apps
+  // SDK setupSizeChangedNotifications pattern.
+  let lastW = 0, lastH = 0, sizePending = false;
+  function measureAndNotify() {
+    if (sizePending) return;
+    sizePending = true;
+    requestAnimationFrame(() => {
+      sizePending = false;
+      const de = document.documentElement;
+      const prev = de.style.height;
+      de.style.height = "max-content";
+      const h = Math.ceil(de.getBoundingClientRect().height);
+      de.style.height = prev;
+      const w = Math.ceil(window.innerWidth);
+      if (w === lastW && h === lastH) return;
+      lastW = w; lastH = h;
+      send({
+        jsonrpc: "2.0",
+        method: "ui/notifications/size-changed",
+        params: { width: w, height: h }
+      });
+    });
+  }
+
+  // ---- MCP Apps handshake (hand-rolled, no SDK) ----
+  // Per claude-ai-mcp#61: host keeps the iframe hidden until we complete
+  //   1. ui/initialize (request)
+  //   2. ui/notifications/initialized (notification)
+  // Spec calls for { appInfo, appCapabilities, protocolVersion } params.
+  const PROTO_VERSION = "2026-01-26";
+  let nextId = 1;
+  const pending = new Map();
+
+  function send(msg) { window.parent.postMessage(msg, "*"); }
+  function request(method, params) {
+    const id = nextId++;
+    send({ jsonrpc: "2.0", id, method, params });
+    return new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+    });
+  }
+
+  window.addEventListener("message", (evt) => {
+    const msg = evt.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (typeof msg.id !== "undefined" && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      msg.error ? reject(msg.error) : resolve(msg.result);
+      return;
+    }
+    if (msg.method === "ui/notifications/tool-result") {
+      onToolResult(msg.params);
+    }
+  });
+
+  async function connect() {
+    try {
+      await request("ui/initialize", {
+        appInfo: { name: "eco-mcp-app", version: "0.1.0" },
+        appCapabilities: {},
+        protocolVersion: PROTO_VERSION,
+      });
+      send({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      measureAndNotify();
+      const ro = new ResizeObserver(measureAndNotify);
+      ro.observe(document.documentElement);
+      ro.observe(document.body);
+    } catch (e) {
+      console.error("[eco-mcp-app] ui/initialize failed:", e);
+    }
+  }
+
+  // ---- HTMX-driven rendering ----
+  // Server renders the card as a server-side Jinja2 template and ships the
+  // rendered HTML as a text content block in the tool result (prefixed
+  // `HTMX:`). We swap it into #root, then call htmx.process() so HTMX wires
+  // up any attributes in the fragment. No hand-written DOM templating in JS.
+  function extractHtmlFragment(result) {
+    const blocks = (result && result.content) || [];
+    for (const b of blocks) {
+      if (b && b.type === "text" && typeof b.text === "string"
+          && b.text.startsWith("HTMX:")) {
+        return b.text.slice("HTMX:".length);
+      }
+    }
+    return null;
+  }
+
+  function onToolResult(params) {
+    const result = params && (params.result || params);
+    const fragment = extractHtmlFragment(result);
+    if (!fragment) return;
+    const root = document.getElementById("root");
+    root.innerHTML = fragment;
+    if (window.htmx) window.htmx.process(root);
+    requestAnimationFrame(measureAndNotify);
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>

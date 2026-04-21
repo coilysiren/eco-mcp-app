@@ -1,14 +1,25 @@
-"""MCP server + UI resource for any public Eco game server."""
+"""MCP server + UI resource for any public Eco game server.
+
+Rendering flow: server-side Jinja2 templates produce both the initial iframe
+shell (served as an MCP resource) and the per-tool-call HTML fragment (shipped
+inside the tool result and swapped into #root client-side). HTMX is loaded in
+the shell and used to `htmx.process()` new fragments — future interactive bits
+can be expressed declaratively with `hx-*` attributes on the partials.
+"""
 
 from __future__ import annotations
 
+import base64
 import json
 import os
+from datetime import UTC, datetime
 from importlib.resources import files
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from jinja2 import ChoiceLoader, Environment, FileSystemLoader, PackageLoader, select_autoescape
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.models import InitializationOptions
@@ -23,6 +34,7 @@ from pydantic import AnyUrl
 
 DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
 DEFAULT_ECO_PORT = int(os.environ.get("ECO_INFO_PORT", "3001"))
+STEAM_URL = "https://store.steampowered.com/app/382310/Eco/"
 RESOURCE_URI = "ui://eco/status.html"
 RESOURCE_MIME = "text/html;profile=mcp-app"
 
@@ -33,6 +45,69 @@ UI_META: dict[str, Any] = {
     "ui": {"resourceUri": RESOURCE_URI},
     "ui/resourceUri": RESOURCE_URI,
 }
+
+# Prefix used on the text content block that carries the Jinja2-rendered HTML
+# fragment, so the iframe JS can find it without mistaking the markdown
+# fallback or the JSON payload for the render source.
+HTMX_PREFIX = "HTMX:"
+
+
+def _fmt_number(n: Any) -> str:
+    if n is None:
+        return "—"
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return str(n)
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 10_000:
+        return f"{n / 1000:.0f}k"
+    return f"{n:,}"
+
+
+def _build_jinja_env() -> Environment:
+    """Build a Jinja2 Environment that works from both installed package and src tree."""
+    here = Path(__file__).resolve().parent
+    loaders = [
+        PackageLoader("eco_mcp_app", "templates"),
+        FileSystemLoader(here / "templates"),
+    ]
+    env = Environment(
+        loader=ChoiceLoader(loaders),
+        autoescape=select_autoescape(["html", "xml"]),
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+    env.globals["any"] = lambda *xs: any(
+        x is not None and x != "" and x != 0 and x != "0" for x in xs
+    )
+    env.globals["fmt"] = _fmt_number
+    return env
+
+
+_JINJA = _build_jinja_env()
+
+
+def _load_asset_data_uri(filename: str, mime: str) -> str:
+    """Read a file from templates/assets/ and return it as a data URI.
+
+    Claude Desktop's sandbox CSP blocks external origins (claude-ai-mcp#40), so
+    HTMX and the Steam banner must be inlined. Rendered once at startup.
+    """
+    try:
+        asset_bytes = (files("eco_mcp_app.templates.assets") / filename).read_bytes()  # type: ignore[union-attr]
+    except (FileNotFoundError, ModuleNotFoundError):
+        here = Path(__file__).resolve().parent
+        asset_bytes = (here / "templates" / "assets" / filename).read_bytes()
+    b64 = base64.b64encode(asset_bytes).decode()
+    return f"data:{mime};base64,{b64}"
+
+
+# Computed once at startup — both are large (banner ~46KB, htmx ~50KB) so
+# re-encoding per render is wasteful.
+_HTMX_SRC = _load_asset_data_uri("htmx.min.js", "application/javascript")
+_BANNER_SRC = _load_asset_data_uri("eco_header.jpg", "image/jpeg")
 
 
 def normalize_server_url(server: str | None) -> str:
@@ -127,6 +202,60 @@ def to_payload(info: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _render_card(payload: dict[str, Any]) -> str:
+    """Render the full card HTML fragment via Jinja2."""
+    server = payload["server"]
+    players = payload["players"]
+    world = payload["world"]
+    cycle = payload["cycle"]
+    economy = payload["economy"]
+    has_meteor = bool(cycle.get("hasMeteor")) and cycle.get("daysUntilMeteor") is not None
+    meteor_pct = (
+        max(0.0, min(100.0, 100.0 - (cycle["daysUntilMeteor"] / 60.0) * 100.0))
+        if has_meteor
+        else 0.0
+    )
+    player_pct = (players["online"] / players["total"] * 100.0) if players.get("total") else 0.0
+    fetched_at = "—"
+    if payload.get("fetchedAtISO"):
+        try:
+            fetched_at = (
+                datetime.fromisoformat(payload["fetchedAtISO"]).astimezone().strftime("%H:%M:%S")
+            )
+        except ValueError:
+            fetched_at = payload["fetchedAtISO"]
+    ctx = {
+        "title": server.get("description") or server.get("category") or "Eco server",
+        "server": server,
+        "players": players,
+        "world": world,
+        "cycle": cycle,
+        "economy": economy,
+        "has_meteor": has_meteor,
+        "meteor_pct": meteor_pct,
+        "player_pct": player_pct,
+        "fetched_at": fetched_at,
+        "achievements_count": len(payload.get("achievements") or []),
+        "source_url": payload.get("sourceUrl"),
+        "steam_url": STEAM_URL,
+        "banner_src": _BANNER_SRC,
+    }
+    return _JINJA.get_template("partials/card.html").render(**ctx)
+
+
+def _render_error(message: str) -> str:
+    return _JINJA.get_template("partials/error.html").render(message=message)
+
+
+def _render_shell() -> str:
+    """Render the iframe shell — what the MCP resource returns."""
+    return _JINJA.get_template("eco.html").render(
+        htmx_src=_HTMX_SRC,
+        banner_src=_BANNER_SRC,
+        steam_url=STEAM_URL,
+    )
+
+
 def _format_markdown(payload: dict[str, Any]) -> str:
     p = payload["players"]
     w = payload["world"]
@@ -149,17 +278,6 @@ def _format_markdown(payload: dict[str, Any]) -> str:
     if payload.get("sourceUrl"):
         lines.append(f"- Source: `{payload['sourceUrl']}`")
     return "\n".join(lines)
-
-
-def _load_ui_html() -> str:
-    """Load the iframe HTML from the package. Falls back to src/ for dev."""
-    try:
-        return (files("eco_mcp_app.ui") / "eco.html").read_text(encoding="utf-8")
-    except (FileNotFoundError, ModuleNotFoundError):
-        # Dev fallback — running from source tree without install
-        here = os.path.dirname(os.path.abspath(__file__))
-        with open(os.path.join(here, "ui", "eco.html"), encoding="utf-8") as f:
-            return f.read()
 
 
 def build_server() -> Server:
@@ -218,14 +336,12 @@ def build_server() -> Server:
     async def read_resource(uri: AnyUrl) -> list[ReadResourceContents]:
         if str(uri) != RESOURCE_URI:
             raise ValueError(f"Unknown resource: {uri}")
-        html = _load_ui_html()
-        return [ReadResourceContents(content=html, mime_type=RESOURCE_MIME)]
+        return [ReadResourceContents(content=_render_shell(), mime_type=RESOURCE_MIME)]
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
         if name != "get_eco_server_status":
             raise ValueError(f"Unknown tool: {name}")
-        from datetime import UTC, datetime
 
         server_arg = arguments.get("server") if arguments else None
         try:
@@ -236,6 +352,7 @@ def build_server() -> Server:
                 content=[
                     TextContent(type="text", text=f"**Eco server unreachable:** {e}"),
                     TextContent(type="text", text=json.dumps(err_payload)),
+                    TextContent(type="text", text=HTMX_PREFIX + _render_error(str(e))),
                 ],
                 isError=True,
                 **{"_meta": UI_META},
@@ -248,6 +365,7 @@ def build_server() -> Server:
             content=[
                 TextContent(type="text", text=_format_markdown(payload)),
                 TextContent(type="text", text=json.dumps(payload)),
+                TextContent(type="text", text=HTMX_PREFIX + _render_card(payload)),
             ],
             **{"_meta": UI_META},
         )

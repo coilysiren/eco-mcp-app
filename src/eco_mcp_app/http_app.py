@@ -6,23 +6,37 @@ connect to an MCP server by URL.
 
 Built on Starlette (not plain FastAPI) so `Mount("/mcp", ...)` cleanly
 matches both `/mcp` and `/mcp/` without the trailing-slash redirect FastAPI
-inserts by default (which breaks MCP clients that POST straight to /mcp).
-Middleware normalizes bare-path `/mcp` to the mount path so both forms work.
+inserts by default. Middleware normalizes bare-path `/mcp` to the mount path
+so both forms work.
+
+Also exposes `/preview` — a dev-only route that renders the iframe shell
+with the Jinja2 card already spliced in. Useful for hot-reload iteration on
+the templates without going through the MCP Apps handshake.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import httpx
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Mount, Route
 
-from .server import build_server
+from .server import (
+    _render_card,
+    _render_error,
+    _render_shell,
+    build_server,
+    fetch_eco_info,
+    redact,
+    to_payload,
+)
 
 if TYPE_CHECKING:
     from starlette.types import ASGIApp, Receive, Scope, Send
@@ -32,9 +46,8 @@ class NormalizeMcpPath:
     """ASGI middleware — rewrites scope.path `/mcp` → `/mcp/` before routing.
 
     Starlette's `Mount("/mcp", ...)` matches `/mcp/` and `/mcp/anything` but
-    not the bare `/mcp` (without trailing slash). Several MCP clients POST
-    straight to `/mcp` and don't follow redirects. Normalizing here is less
-    invasive than two overlapping routes.
+    not bare `/mcp`. Some MCP clients POST straight to `/mcp` and don't follow
+    redirects. Normalizing here is less invasive than two overlapping routes.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -46,10 +59,20 @@ class NormalizeMcpPath:
         await self.app(scope, receive, send)
 
 
+def _splice_card_into_shell(shell: str, fragment: str) -> str:
+    """Place a rendered card fragment immediately inside #root in the shell."""
+    marker = '<div class="shell" id="root">'
+    idx = shell.find(marker)
+    if idx < 0:
+        return shell
+    splice_at = idx + len(marker)
+    return shell[:splice_at] + fragment + shell[splice_at:]
+
+
 def create_app() -> Starlette:
     mcp_server = build_server()
     # stateless=True: every request gets a fresh transport. Fits the tool shape
-    # here — each call is a one-shot fetch of /info, no long-lived session state.
+    # — each call is a one-shot /info fetch, no long-lived session state.
     session_manager = StreamableHTTPSessionManager(app=mcp_server, stateless=True)
 
     @asynccontextmanager
@@ -58,10 +81,31 @@ def create_app() -> Starlette:
             yield
 
     async def root(_: Request) -> JSONResponse:
-        return JSONResponse({"service": "eco-mcp-app", "mcp": "/mcp/"})
+        return JSONResponse(
+            {
+                "service": "eco-mcp-app",
+                "mcp": "/mcp/",
+                "preview": "/preview",
+                "health": "/healthz",
+            }
+        )
 
     async def healthz(_: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
+
+    async def preview(request: Request) -> HTMLResponse:
+        """Render the iframe shell + Jinja2 card inline, bypassing MCP handshake."""
+        server_arg = request.query_params.get("server")
+        shell = _render_shell()
+        try:
+            raw = await fetch_eco_info(server_arg)
+        except httpx.HTTPError as e:
+            fragment = _render_error(str(e))
+        else:
+            info = redact(raw)
+            info["_fetchedAtISO"] = datetime.now(UTC).isoformat()
+            fragment = _render_card(to_payload(info))
+        return HTMLResponse(_splice_card_into_shell(shell, fragment))
 
     async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
         await session_manager.handle_request(scope, receive, send)
@@ -71,6 +115,7 @@ def create_app() -> Starlette:
         routes=[
             Route("/", root, methods=["GET"]),
             Route("/healthz", healthz, methods=["GET"]),
+            Route("/preview", preview, methods=["GET"]),
             Mount("/mcp", app=handle_mcp),
         ],
     )

@@ -45,6 +45,12 @@ def harness(c, port=8765):  # type: ignore[no-untyped-def]
 
 
 @task
+def test(c):  # type: ignore[no-untyped-def]
+    """Run pytest."""
+    c.run("uv run pytest")
+
+
+@task
 def ruff(c):  # type: ignore[no-untyped-def]
     """Lint + format (check mode)."""
     c.run("uv run ruff check src tasks.py")

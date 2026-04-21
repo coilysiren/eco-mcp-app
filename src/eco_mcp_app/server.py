@@ -13,6 +13,7 @@ import base64
 import json
 import os
 import re
+import time
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -71,7 +72,7 @@ _TMP_TOKEN = re.compile(
 )
 _TMP_OTHER_TAG = re.compile(
     r"</?(?:b|i|u|s|size|sprite|icon|style|mark|lowercase|uppercase|smallcaps)"
-    r"(?:\s[^>]*)?/?>",
+    r"(?:[\s=][^>]*)?/?>",
     re.IGNORECASE,
 )
 
@@ -205,6 +206,9 @@ def _load_asset_data_uri(filename: str, mime: str) -> str:
 # re-encoding per render is wasteful.
 _HTMX_SRC = _load_asset_data_uri("htmx.min.js", "application/javascript")
 _BANNER_SRC = _load_asset_data_uri("eco_header.jpg", "image/jpeg")
+# play.eco's ecofavicon.ico, inlined because Claude Desktop's CSP blocks
+# external origins (claude-ai-mcp#40).
+_FAVICON_SRC = _load_asset_data_uri("favicon.ico", "image/x-icon")
 
 
 def normalize_server_url(server: str | None) -> str:
@@ -218,6 +222,8 @@ def normalize_server_url(server: str | None) -> str:
     if not server:
         return DEFAULT_ECO_INFO_URL
     s = server.strip()
+    if not s:
+        return DEFAULT_ECO_INFO_URL
     if "://" not in s:
         s = f"http://{s}"
     parsed = urlparse(s)
@@ -227,14 +233,29 @@ def normalize_server_url(server: str | None) -> str:
     return urlunparse((parsed.scheme or "http", f"{host}:{port}", path, "", "", ""))
 
 
+# In-memory cache for /info responses. The /preview route can get hammered by
+# refreshes, and each cache miss fans out to a third-party Eco server — without
+# this a single tab reloader can DoS a small community server. 30s matches
+# Eco's own in-game stats update cadence closely enough that nothing visibly
+# stale slips through. Cache key is the normalized URL so the same server
+# expressed two ways (`host` vs `host:3001/info`) shares an entry.
+_INFO_CACHE_TTL_S = float(os.environ.get("ECO_INFO_CACHE_TTL", "30"))
+_info_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
 async def fetch_eco_info(server: str | None = None) -> dict[str, Any]:
-    """Hit the Eco server /info endpoint. Raises on non-200."""
+    """Hit the Eco server /info endpoint. Raises on non-200. 30s memoized."""
     url = normalize_server_url(server)
+    now = time.monotonic()
+    cached = _info_cache.get(url)
+    if cached and (now - cached[0]) < _INFO_CACHE_TTL_S:
+        return dict(cached[1])
     async with httpx.AsyncClient(timeout=5.0) as client:
         r = await client.get(url)
         r.raise_for_status()
         data: dict[str, Any] = r.json()
         data["_sourceUrl"] = url
+        _info_cache[url] = (now, dict(data))
         return data
 
 
@@ -356,6 +377,7 @@ def _render_shell(prerendered: str | None = None) -> str:
     return _JINJA.get_template("eco.html").render(
         htmx_src=_HTMX_SRC,
         banner_src=_BANNER_SRC,
+        favicon_src=_FAVICON_SRC,
         steam_url=STEAM_URL,
         prerendered=Markup(prerendered) if prerendered else None,
     )

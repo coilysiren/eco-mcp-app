@@ -4,6 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Eco — server status</title>
+<link rel="icon" type="image/x-icon" href="{{ favicon_src }}">
+{# Open Graph / Twitter card — makes /preview URLs shareable in chat apps.
+   Inside the Claude Desktop iframe these are inert; on the /preview route
+   they drive the link preview when the URL is pasted. #}
+<meta property="og:title" content="Eco — server status">
+<meta property="og:description" content="Live dashboard for a public Eco game server: players, meteor countdown, world stats, economy.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="{{ banner_src }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Eco — server status">
+<meta name="twitter:description" content="Live dashboard for a public Eco game server: players, meteor countdown, world stats, economy.">
+<meta name="twitter:image" content="{{ banner_src }}">
 {# Claude.ai reads inline documentElement.style.height (claude-ai-mcp#69).
    Set it in the markup so the host snapshots 780px before our JS runs. #}
 <script>document.documentElement.style.height="780px";</script>

@@ -1,16 +1,20 @@
+[![Eco by Strange Loop Games](https://cdn.cloudflare.steamstatic.com/steam/apps/382310/header.jpg)](https://store.steampowered.com/app/382310/Eco/)
+
+<sub>Banner: Steam header for Eco by [Strange Loop Games](https://strangeloopgames.com/). Used here for attribution; not my artwork.</sub>
+
 # eco-mcp-app
 
-An inline Claude Desktop widget for any public **Eco** game server [4] — point it
-at the "Eco via Sirens" [1] server (the default) or any other Eco server by IP
+An inline Claude Desktop widget for any public **Eco** game server [1] — point it
+at the "Eco via Sirens" [2] server (the default) or any other Eco server by IP
 or hostname. Ask Claude "what's the Eco server doing?" and you get a live card
 back: meteor countdown, online/total players, world size, laws, economy,
 Discord CTA, a link to Eco on Steam. No screenshots, no tab-switching. Cards
 you don't have data for just aren't rendered.
 
-It's also a tech demo — a minimal, hand-rolled MCP Apps implementation [2]
+It's also a tech demo — a minimal, hand-rolled MCP Apps implementation [3]
 without a bundler or React, so the whole iframe is one 300-line HTML file.
 Useful as a reference for anyone else building an MCP App in Python rather
-than the default TypeScript/ext-apps [3] stack.
+than the default TypeScript/ext-apps [4] stack.
 
 ![](https://img.shields.io/badge/python-3.13-3776ab)
 ![](https://img.shields.io/badge/mcp-1.14+-ff6b35)
@@ -47,7 +51,7 @@ than the default TypeScript/ext-apps [3] stack.
 
 The server (`src/eco_mcp_app/server.py`) exposes one tool,
 `get_eco_server_status`, which hits `http://eco.coilysiren.me:3001/info` (the
-public `/info` endpoint Eco [4] servers expose by default), redacts player
+public `/info` endpoint Eco [1] servers expose by default), redacts player
 names, and returns two content blocks: a markdown fallback for text-only
 hosts, and a JSON payload for the iframe. The tool's `_meta.ui.resourceUri`
 points at `ui://eco/status.html`, which is the iframe HTML registered as a
@@ -62,19 +66,22 @@ handshake per the spec [5]:
 3. Iframe → host: `ui/notifications/initialized` (notification)
 4. Host → iframe: `ui/notifications/tool-result` whenever a matching tool fires
 
-The handshake is ~30 lines. The ext-apps SDK [3] does more (auto-resize,
+The handshake is ~30 lines. The ext-apps SDK [4] does more (auto-resize,
 capability negotiation), but for a read-only dashboard we don't need any of
 it — and writing it out makes the spec readable.
 
 ## See also
 
-This repo sits next to a small Eco ecosystem: `eco-cycle-prep` [6] runs
+This repo sits next to a small Eco ecosystem: `eco-spec-tracker` [6] is the
+direct sibling read-only dashboard (same FastAPI + Jinja2 + HTMX stack, paired
+with a C# mod that publishes per-player job specs); `eco-cycle-prep` [7] runs
 per-cycle setup (worldgen, Discord announcements, mod sync); `eco-mods-public` [8]
 is where the gameplay mods live. The deploy pattern (Dockerfile, Makefile,
-k8s manifest, GH Actions) is cloned from `coilysiren/backend` [7], which is
+k8s manifest, GH Actions) is cloned from `coilysiren/backend` [9], which is
 the canonical template for the homelab k3s + GHCR + Tailscale + cert-manager
-stack. Canonical Eco references: ModKit [10], modding docs [11], Eco wiki
-modding page [12], the Discord bridge plugin [13], and mod catalog [14].
+stack. Eco itself is by [Strange Loop Games](https://strangeloopgames.com/);
+canonical references: ModKit [10], modding docs [11], Eco wiki modding page [12],
+the Discord bridge plugin [13], and mod catalog [14].
 
 ## Install (local, Claude Desktop)
 
@@ -116,7 +123,7 @@ servers advertise `/info` on `:3001` — the links above use the `/info` port.
 ## Deploy (homelab)
 
 Target: `eco-mcp.coilysiren.me` on the k3s cluster, following the template in
-`coilysiren/backend` [7] (same Dockerfile/Makefile/deploy shape). The server
+`coilysiren/backend` [9] (same Dockerfile/Makefile/deploy shape). The server
 speaks MCP over Streamable-HTTP at `/mcp/` via `src/eco_mcp_app/http_app.py`
 (Starlette + `StreamableHTTPSessionManager` in stateless mode). Health probe
 at `/healthz`.
@@ -215,15 +222,15 @@ MIT.
 
 ## References
 
-1. <https://www.coilysiren.me/>
-2. <https://modelcontextprotocol.io/docs/concepts/apps>
-3. <https://github.com/modelcontextprotocol/ext-apps>
-4. <https://play.eco/>
+1. <https://play.eco/>
+2. <https://www.coilysiren.me/>
+3. <https://modelcontextprotocol.io/docs/concepts/apps>
+4. <https://github.com/modelcontextprotocol/ext-apps>
 5. <https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx>
-6. <https://github.com/coilysiren/eco-cycle-prep>
-7. <https://github.com/coilysiren/backend>
+6. <https://github.com/coilysiren/eco-spec-tracker>
+7. <https://github.com/coilysiren/eco-cycle-prep>
 8. <https://github.com/coilysiren/eco-mods-public>
-9. <https://github.com/coilysiren/infrastructure>
+9. <https://github.com/coilysiren/backend>
 10. <https://github.com/StrangeLoopGames/EcoModKit>
 11. <https://docs.play.eco/>
 12. <https://wiki.play.eco/en/Modding>
@@ -236,15 +243,15 @@ MIT.
 <!-- reference definitions below are invisible in rendered Markdown;
      they make the [N] tokens in the body clickable without a second visible list. -->
 
-[1]: https://www.coilysiren.me/
-[2]: https://modelcontextprotocol.io/docs/concepts/apps
-[3]: https://github.com/modelcontextprotocol/ext-apps
-[4]: https://play.eco/
+[1]: https://play.eco/
+[2]: https://www.coilysiren.me/
+[3]: https://modelcontextprotocol.io/docs/concepts/apps
+[4]: https://github.com/modelcontextprotocol/ext-apps
 [5]: https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx
-[6]: https://github.com/coilysiren/eco-cycle-prep
-[7]: https://github.com/coilysiren/backend
+[6]: https://github.com/coilysiren/eco-spec-tracker
+[7]: https://github.com/coilysiren/eco-cycle-prep
 [8]: https://github.com/coilysiren/eco-mods-public
-[9]: https://github.com/coilysiren/infrastructure
+[9]: https://github.com/coilysiren/backend
 [10]: https://github.com/StrangeLoopGames/EcoModKit
 [11]: https://docs.play.eco/
 [12]: https://wiki.play.eco/en/Modding

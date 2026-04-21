@@ -408,3 +408,76 @@
     border-bottom: 1px dotted rgba(165, 209, 74, 0.55);
   }
   .ecopedia-footer a:hover { color: #c7e87a; }
+
+  /* ---- crafting activity atlas ---- */
+  .crafting-atlas { margin-top: 18px; }
+  .crafting-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
+  }
+  .crafting-title {
+    font-size: 20px; font-weight: 700; color: var(--leaf-bright);
+  }
+  .crafting-sub { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+  .crafting-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .crafting-actions .pill {
+    background: rgba(165, 209, 74, 0.12);
+    border: 1px solid var(--panel-border);
+    color: var(--fg-muted);
+    padding: 3px 9px; border-radius: 10px;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .crafting-section { margin-bottom: 18px; }
+  .crafting-section-label {
+    text-transform: uppercase; letter-spacing: 0.06em;
+    font-size: 11px; color: var(--fg-faint); margin-bottom: 6px;
+  }
+  .sankey {
+    width: 100%; max-width: 960px; height: auto;
+    background: rgba(20, 26, 16, 0.55);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 14px;
+  }
+  .crafting-grid {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .crafting-panel {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .crafting-list { list-style: none; margin: 0; padding: 0; }
+  .crafting-list li {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    grid-template-rows: auto auto;
+    column-gap: 8px; align-items: center;
+    padding: 4px 0; font-size: 13px;
+  }
+  .crafting-list li .rank {
+    color: var(--fg-faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; grid-row: 1;
+  }
+  .crafting-list li .name {
+    color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    grid-row: 1;
+  }
+  .crafting-list li .count {
+    color: var(--leaf-bright); font-weight: 600; font-size: 12px;
+    grid-row: 1;
+  }
+  .crafting-list li .bar-wrap {
+    grid-column: 1 / -1; grid-row: 2;
+    height: 4px; background: rgba(165, 209, 74, 0.08);
+    border-radius: 2px; overflow: hidden; margin-top: 2px;
+  }
+  .crafting-list li .bar-wrap .bar {
+    display: block; height: 100%; width: var(--w, 0%);
+    background: linear-gradient(90deg, var(--leaf) 0%, var(--leaf-bright) 100%);
+    border-radius: 2px;
+  }
+  .crafting-warnings { margin-top: 14px; }
+  .crafting-warnings .hint {
+    font-size: 11px; color: var(--warn); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }

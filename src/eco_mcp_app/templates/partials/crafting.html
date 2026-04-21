@@ -1,0 +1,146 @@
+{# Crafting Activity Atlas — rendered inside #root after a tool call.
+   Every datum is precomputed server-side; the SVG sankey is static so CSP
+   doesn't need to allow external JS (d3 etc.). Empty-state is a distinct
+   branch because Day 3 of a cycle is routinely zero events for some action
+   types. #}
+<div class="crafting-atlas">
+  <div class="crafting-head">
+    <div>
+      <div class="crafting-title">Crafting activity atlas</div>
+      <div class="crafting-sub">
+        {% if empty %}
+          No production events recorded on this server yet.
+        {% else %}
+          {{ fmt(total_events) }} events · {{ source_base_url }}
+        {% endif %}
+      </div>
+    </div>
+    {% if per_action_counts %}
+    <div class="crafting-actions">
+      {% for name, count in per_action_counts %}
+        <span class="pill">{{ name }}: {{ fmt(count) }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if empty %}
+    <div class="empty">
+      <div style="font-size:20px;font-weight:800;color:var(--leaf-bright);">
+        Nothing crafted yet
+      </div>
+      <div class="hint">
+        The action exporter returned zero rows. Early in the cycle this is
+        normal — check back after a few days of play.
+      </div>
+    </div>
+  {% else %}
+
+  {% if sankey and sankey.edges %}
+  <div class="crafting-section">
+    <div class="crafting-section-label">Station → output flow</div>
+    <svg class="sankey"
+         viewBox="0 0 {{ sankey.width + 240 }} {{ sankey.height }}"
+         preserveAspectRatio="xMidYMid meet"
+         role="img"
+         aria-label="Sankey diagram of crafting flows">
+      <g transform="translate(10,0)">
+        {% for e in sankey.edges %}
+          <path d="{{ e.path }}"
+                fill="none"
+                stroke="var(--leaf)"
+                stroke-opacity="0.35"
+                stroke-width="{{ '%.1f' % e.width }}">
+            <title>{{ e.source }} → {{ e.target }} ({{ fmt(e.count) }})</title>
+          </path>
+        {% endfor %}
+        {% for n in sankey.left_nodes %}
+          <rect x="{{ sankey.left_x }}" y="{{ '%.1f' % n.y }}"
+                width="{{ sankey.node_w }}" height="{{ '%.1f' % n.h }}"
+                fill="var(--leaf-bright)" />
+          <text x="{{ sankey.left_x - 4 }}" y="{{ '%.1f' % (n.y + n.h / 2 + 4) }}"
+                text-anchor="end"
+                font-size="11"
+                fill="var(--fg-muted)">{{ n.pretty }}</text>
+        {% endfor %}
+        {% for n in sankey.right_nodes %}
+          <rect x="{{ sankey.right_x }}" y="{{ '%.1f' % n.y }}"
+                width="{{ sankey.node_w }}" height="{{ '%.1f' % n.h }}"
+                fill="var(--sun)" />
+          <text x="{{ sankey.right_x + sankey.node_w + 4 }}"
+                y="{{ '%.1f' % (n.y + n.h / 2 + 4) }}"
+                text-anchor="start"
+                font-size="11"
+                fill="var(--fg-muted)">{{ n.pretty }}</text>
+        {% endfor %}
+      </g>
+    </svg>
+  </div>
+  {% endif %}
+
+  <div class="crafting-grid">
+    <div class="crafting-panel">
+      <div class="crafting-section-label">Top items produced</div>
+      {% if top_items %}
+      <ol class="crafting-list">
+        {% for item in top_items %}
+          <li>
+            <span class="rank">{{ loop.index }}.</span>
+            <span class="name" title="{{ item.name }}">{{ item.pretty }}</span>
+            <span class="count">{{ fmt(item.count) }}</span>
+            <span class="bar-wrap"><span class="bar" style="--w:{{ '%.1f' % item.pct }}%"></span></span>
+          </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+        <div class="hint">No item output recorded.</div>
+      {% endif %}
+    </div>
+
+    <div class="crafting-panel">
+      <div class="crafting-section-label">Station utilization</div>
+      {% if top_stations %}
+      <ol class="crafting-list">
+        {% for st in top_stations %}
+          <li>
+            <span class="rank">{{ loop.index }}.</span>
+            <span class="name" title="{{ st.name }}">{{ st.pretty }}</span>
+            <span class="count">{{ fmt(st.count) }}</span>
+            <span class="bar-wrap"><span class="bar" style="--w:{{ '%.1f' % st.pct }}%"></span></span>
+          </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+        <div class="hint">No station events recorded.</div>
+      {% endif %}
+    </div>
+
+    <div class="crafting-panel">
+      <div class="crafting-section-label">Top crafters</div>
+      {% if top_citizens %}
+      <ol class="crafting-list">
+        {% for c in top_citizens %}
+          <li>
+            <span class="rank">{{ loop.index }}.</span>
+            <span class="name">Citizen #{{ c.name }}</span>
+            <span class="count">{{ fmt(c.count) }}</span>
+            <span class="bar-wrap"><span class="bar" style="--w:{{ '%.1f' % c.pct }}%"></span></span>
+          </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+        <div class="hint">No citizen production recorded.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% endif %}
+
+  {% if warnings %}
+  <div class="crafting-warnings">
+    {% for w in warnings %}
+      <div class="hint">⚠ {{ w }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>

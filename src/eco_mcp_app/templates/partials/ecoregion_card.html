@@ -11,11 +11,11 @@
   <section class="ecoregion-section">
     <div class="ecoregion-donut-row">
       <svg class="ecoregion-donut" viewBox="-50 -50 100 100" width="180" height="180" role="img" aria-label="Biome composition donut chart">
-        {# Each slice is rendered as a stroked arc. unclassifiedPercent fills
-           the remainder to 100% so the donut closes. #}
-        {# Background ring (unclassified / "unknown" territory) #}
+        {# Slices represent each biome's share of classified area, so the
+           ring closes. The classified-vs-transitional split is in the
+           hint below. #}
         <circle cx="0" cy="0" r="40" fill="none"
-                stroke="#3a3a3a" stroke-opacity="0.35" stroke-width="14"></circle>
+                stroke="#3a3a3a" stroke-opacity="0.25" stroke-width="14"></circle>
         {% for slice in donut_slices %}
           <circle cx="0" cy="0" r="40" fill="none"
                   stroke="{{ slice.color }}" stroke-width="14"
@@ -24,34 +24,27 @@
                   transform="rotate(-90)"></circle>
         {% endfor %}
         <text x="0" y="-3" text-anchor="middle" fill="var(--fg)"
-              font-size="8" font-weight="700">{{ '%.0f' % raw_sum_percent }}%</text>
+              font-size="8" font-weight="700">{{ '%.0f' % classified_percent }}%</text>
         <text x="0" y="7" text-anchor="middle" fill="var(--fg-muted)"
               font-size="5">classified</text>
       </svg>
 
       <ul class="ecoregion-legend">
         {% for b in biomes %}
-          {% if b.percent > 0 %}
+          {% if b.sharePercent > 0 %}
           <li>
             <span class="swatch" style="background:{{ b.color }}"></span>
             <span class="legend-label">{{ b.display }}</span>
-            <span class="legend-pct">{{ '%.0f' % b.percent }}%</span>
+            <span class="legend-pct">{{ '%.0f' % b.sharePercent }}%</span>
           </li>
           {% endif %}
         {% endfor %}
-        {% if unclassified_percent > 0 %}
-          <li class="legend-unclassified">
-            <span class="swatch" style="background:#555;opacity:0.5"></span>
-            <span class="legend-label">Unclassified / mixed</span>
-            <span class="legend-pct">{{ '%.0f' % unclassified_percent }}%</span>
-          </li>
-        {% endif %}
       </ul>
     </div>
     <div class="hint ecoregion-hint">
-      Eco biome layers don't tile the world — mountains, shoreline, and
-      transitional zones are unclassified, so the slices only sum to
-      {{ '%.0f' % raw_sum_percent }}%.
+      Shares are over classified biome only — {{ '%.0f' % unclassified_percent }}% of
+      world area (mountains, shoreline, transitional zones) isn't tagged to a
+      biome layer.
     </div>
   </section>
   {% else %}

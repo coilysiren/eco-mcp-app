@@ -178,6 +178,30 @@
     border: 1px solid rgba(165, 209, 74, 0.18);
     color: var(--fg-muted); border-radius: 999px; font-size: 11px;
   }
+  /* ---- "try another server" strip between chips and footer ---- */
+  .try-others {
+    margin-top: 14px; padding: 10px 14px;
+    background: rgba(165, 209, 74, 0.05);
+    border: 1px dashed rgba(165, 209, 74, 0.22);
+    border-radius: 10px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-size: 11px; color: var(--fg-muted);
+  }
+  .try-others-label { white-space: nowrap; }
+  .try-others-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .try-others .pill {
+    padding: 3px 10px; border-radius: 999px;
+    background: rgba(165, 209, 74, 0.1);
+    border: 1px solid rgba(165, 209, 74, 0.3);
+    color: var(--leaf-bright); text-decoration: none; font-weight: 500;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+  .try-others .pill:hover {
+    background: rgba(165, 209, 74, 0.2);
+    border-color: rgba(165, 209, 74, 0.6);
+    color: #c7e87a;
+  }
+
   /* ---- green footer panel: meta row + credits row ---- */
   .footer {
     margin-top: 16px; padding: 14px 18px 12px;

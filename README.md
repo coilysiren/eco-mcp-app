@@ -118,7 +118,7 @@ resource on `id=3`, and a JSON payload with `"view":"eco_status"` on `id=4`.
 
 ## Dev harness (iterate on the iframe without restarting Claude)
 
-`dev/harness.html` is a minimal HTML page that mimics Claude Desktop's MCP Apps
+`static/harness.html` is a minimal HTML page that mimics Claude Desktop's MCP Apps
 host so the iframe can be developed in a normal browser — no ⌘Q / relaunch
 cycle per change. The harness:
 
@@ -139,7 +139,7 @@ Run it with:
 
 ```sh
 inv harness
-# then open http://localhost:8765/dev/harness.html
+# then open http://localhost:8765/static/harness.html
 ```
 
 The status bar at the top of the harness shows the last `size-changed` value

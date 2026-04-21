@@ -130,7 +130,7 @@ The iframe had a silent global SyntaxError (my new `measureAndNotify` had
 but the main IIFE threw immediately — no stars rendered, no console
 errors visible from the parent window. Completely invisible.
 
-The harness (`eco-mcp-app/dev/harness.html` — see also `inv harness`)
+The harness (`eco-mcp-app/static/harness.html` — see also `inv harness`)
 mimics Claude Desktop's MCP Apps host in ~100 lines:
 
 - Responds to `ui/initialize` with a canned `McpUiInitializeResult`

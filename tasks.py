@@ -33,14 +33,14 @@ def install_desktop(c):  # type: ignore[no-untyped-def]
 
 @task(help={"port": "Port to bind the harness HTTP server on (default: 8765)."})
 def harness(c, port=8765):  # type: ignore[no-untyped-def]
-    """Serve the dev/harness.html that mimics Claude Desktop's MCP Apps host.
+    """Serve the static/harness.html that mimics Claude Desktop's MCP Apps host.
 
-    Opens http://localhost:<port>/dev/harness.html — an HTML page that embeds the
+    Opens http://localhost:<port>/static/harness.html — an HTML page that embeds the
     iframe, answers ui/initialize, pushes a canned ui/notifications/tool-result,
     and listens for ui/notifications/size-changed. Useful for iterating on the
     iframe without needing to Cmd+Q Claude Desktop every time.
     """
-    print(f"Harness: http://localhost:{port}/dev/harness.html")
+    print(f"Harness: http://localhost:{port}/static/harness.html")
     c.run(f"python3 -m http.server {port}")
 
 

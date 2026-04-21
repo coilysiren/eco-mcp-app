@@ -26,7 +26,7 @@ Commit whenever a unit of work feels sufficiently complete — after fixing a bu
 - `src/eco_mcp_app/server.py` — MCP server (stdio, low-level SDK). One tool: `get_eco_server_status`.
 - `src/eco_mcp_app/ui/eco.html` — the iframe rendered by MCP Apps hosts; hand-rolled handshake, no bundler.
 - `scripts/install-desktop-config.py` — registers this server in Claude Desktop's config.
-- `dev/harness.html` — browser-based MCP Apps host simulator for iterating on the iframe without restarting Claude Desktop. Also wired into `.claude/launch.json` as the `eco-harness` preview.
+- `static/harness.html` — browser-based MCP Apps host simulator for iterating on the iframe without restarting Claude Desktop. Also wired into `.claude/launch.json` as the `eco-harness` preview.
 - `tasks.py` — `inv smoke`, `inv harness`, `inv ruff`, `inv fmt`, `inv install-desktop`.
 - `investigation/` — chronological post-mortem of the debugging session that produced this repo. Read these before questioning a decision that looks weird.
 
@@ -35,7 +35,7 @@ Commit whenever a unit of work feels sufficiently complete — after fixing a bu
 - `uv sync --group dev` — install runtime + dev deps.
 - `pre-commit install` (once) — ruff + mypy run on every `git commit`.
 - `inv smoke` — stdio smoke test: initialize → list tools → read resource → call tool.
-- `inv harness` — serve the dev harness at `http://localhost:8765/dev/harness.html` for iframe work.
+- `inv harness` — serve the dev harness at `http://localhost:8765/static/harness.html` for iframe work.
 - `inv ruff` / `inv fmt` — lint/format check vs apply.
 
 ## Sibling Eco repos

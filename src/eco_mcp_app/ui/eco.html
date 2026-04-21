@@ -24,15 +24,17 @@
     --warn: #ffb74d;
   }
   /* Claude.ai sandbox iframe reads `documentElement.height` directly and ignores
-     ui/notifications/size-changed (claude-ai-mcp#69). So `100vh` creates a
-     circular dependency: iframe viewport=0 → 100vh=0 → we report 0 → iframe
-     stays 0. Use a fixed min-height and also explicitly set the
-     documentElement height in JS after every render. */
+     ui/notifications/size-changed (claude-ai-mcp#69). It also *snapshots* the
+     height early and locks the iframe at that value — any later expansion is
+     ignored. So we set a generous fixed height on <html> up front (from JS) and
+     DON'T use 100vh (creates a 0-height circular dependency inside the
+     sandbox) and DON'T use ResizeObserver (fires pre-render and locks tiny). */
   * { box-sizing: border-box; }
+  html { height: 780px; }  /* JS overwrites with measured height after render */
   html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--fg);
     font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
     font-size: 14px; line-height: 1.45; overflow-x: hidden; }
-  body { min-height: 520px; position: relative; }
+  body { min-height: 780px; position: relative; }
 
   /* ---- starfield ---- */
   .sky {
@@ -225,17 +227,22 @@
 <script>
 (() => {
   // ---- iframe sizing (claude-ai-mcp#69 workaround) ----
-  // Claude.ai reads documentElement.height directly from the iframe DOM.
-  // Set it explicitly after every render; also observe body size so it updates
-  // when content changes (e.g. when tool-result swaps the empty state for the
-  // full dashboard).
+  // Claude.ai reads documentElement.height directly from the iframe DOM and
+  // snapshots it early — later expansions do NOT resize the container. So:
+  //   1. CSS already sets html/body to a generous fixed 780px
+  //   2. After render, temporarily set html height to "max-content", measure
+  //      the real content height, then set documentElement.style.height to
+  //      max(measured, 780). Mirrors ext-apps SDK's setupSizeChangedNotifications.
+  //   3. No ResizeObserver — it fires pre-render and locks the iframe tiny.
   function syncHeight() {
-    const h = Math.max(document.body.scrollHeight, 520);
-    document.documentElement.style.height = h + "px";
+    const de = document.documentElement;
+    const prev = de.style.height;
+    de.style.height = "max-content";
+    const measured = Math.ceil(de.getBoundingClientRect().height);
+    const target = Math.max(measured, 780);
+    de.style.height = target + "px";
+    console.log("[eco-mcp-app] syncHeight — content=" + measured + " final=" + target);
   }
-  const sizeObs = new ResizeObserver(syncHeight);
-  sizeObs.observe(document.body);
-  syncHeight();
 
   // ---- starfield ----
   const sky = document.getElementById("sky");

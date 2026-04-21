@@ -112,26 +112,26 @@ _species_cache: dict[tuple[str, str], tuple[float, list[tuple[int, float]]]] = {
 def _load_ecoregions_bundled() -> list[dict[str, Any]]:
     """Load the committed WWF fixture.
 
-    Looks first on the filesystem (repo checkout) then falls back to the
-    packaged copy. Shipping it as package data would require pyproject wiring;
-    for a small JSON blob that a single tool reads, on-disk in the repo is
-    simpler. If the file is missing we log a warning-style message and return
-    an empty list so the card still renders without the middle section.
+    Installed wheels carry the file as package data under
+    ``eco_mcp_app/data/ecoregions.json`` (see ``force-include`` in
+    pyproject.toml). Editable/source checkouts keep it at repo-root
+    ``data/ecoregions.json`` — the force-include isn't applied then, so we
+    walk up from ``__file__`` to find it.
     """
+    try:
+        packaged = files("eco_mcp_app").joinpath("data", "ecoregions.json")
+        if packaged.is_file():
+            return list(json.loads(packaged.read_text()).get("regions") or [])
+    except (FileNotFoundError, ModuleNotFoundError):
+        pass
     here = Path(__file__).resolve().parent
-    # Walk up a couple levels looking for data/ecoregions.json — the file
-    # lives at repo root so it's a sibling of src/.
     for parent in (here.parent.parent, here.parent, here):
         candidate = parent / "data" / "ecoregions.json"
         if candidate.exists():
             with candidate.open() as f:
                 doc = json.load(f)
             return list(doc.get("regions") or [])
-    try:
-        packaged = files("eco_mcp_app.data") / "ecoregions.json"  # type: ignore[union-attr]
-        return list(json.loads(packaged.read_text()).get("regions") or [])
-    except (FileNotFoundError, ModuleNotFoundError):
-        return []
+    return []
 
 
 # ---------- HTTP fetchers ----------
@@ -384,6 +384,10 @@ def build_payload(
     """Assemble the serializable payload used by both the Jinja card and JSON content."""
     raw_sum = sum(biome_percents.values())
     unclassified = max(0.0, 100.0 - raw_sum)
+    # Rescale to "share of classified area" so the donut renders a full ring.
+    # Eco's worldlayers endpoint only sums to ~40% (transitional terrain
+    # isn't tagged) — showing that as a big grey slice drowned out signal.
+    normalized = normalize_vector(biome_percents)
     return {
         "view": "eco_ecoregion",
         "sourceUrl": source_url,
@@ -392,12 +396,14 @@ def build_payload(
                 "name": key,
                 "display": BIOME_DISPLAY.get(key, key),
                 "percent": biome_percents.get(key, 0.0),
+                "sharePercent": normalized.get(key, 0.0) * 100.0,
                 "color": BIOME_COLORS.get(key, "#888888"),
             }
             for key in BIOME_LAYERS
         ],
         "unclassifiedPercent": unclassified,
         "rawSumPercent": raw_sum,
+        "classifiedPercent": raw_sum,
         "ecoregionMatches": [
             {
                 "name": m.name,

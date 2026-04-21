@@ -43,6 +43,24 @@
       ],
       "port": 4004,
       "url": "/preview/get_eco_species?name=Bison"
+    },
+    {
+      "name": "eco-http-epic",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DEBUG=1",
+        "uv",
+        "run",
+        "uvicorn",
+        "eco_mcp_app.http_app:app",
+        "--reload",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "4002"
+      ],
+      "port": 4002,
+      "url": "/preview/get_eco_ecoregion"
     }
   ]
 }

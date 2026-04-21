@@ -6,8 +6,11 @@ The card combines three data sources:
    plain text) + `/api/v1/exporter/species?speciesName=X` (CSV of
    `Time,Value` where Time is seconds since cycle start at 600s cadence).
    Both need `X-API-Key` from SSM `/eco-mcp-app/api-admin-token` in `us-east-1`.
-2. **iNaturalist** — `GET /v1/taxa?q={name}&rank=species&per_page=1`.
-   Public, no auth, 60 req/min, requires a User-Agent header.
+2. **iNaturalist** — `GET /v1/taxa?q={name}&rank=species,genus&per_page=10`.
+   Public, no auth, 60 req/min, requires a User-Agent header. We ask for
+   both species- and genus-level hits because Eco's `BisonSpecies` maps to
+   the `Bison` *genus* in iNat — species-only filtering dropped it and
+   left a grass taxon ("bison grass") as the top hit.
 3. **Wikipedia REST** — `/api/rest_v1/page/summary/{title}` as fallback when
    iNat returns zero taxa.
 
@@ -135,27 +138,83 @@ def clean_species_name(species_id: str) -> str:
 # --- Admin API key ---------------------------------------------------------
 
 
+_SSM_PARAM_NAME = "/eco-mcp-app/api-admin-token"
+_SSM_REGION = "us-east-1"
+
+# Cached for the life of the process — SSM round-trips are slow and the
+# token doesn't rotate mid-request. `None` means "not yet looked up";
+# an empty string means "looked up, nothing available".
+_ADMIN_KEY_CACHE: str | None = None
+_ADMIN_KEY_LOOKED_UP = False
+
+
 def _get_admin_api_key() -> str | None:
     """Fetch the admin API key.
 
-    Prefer the `ECO_ADMIN_API_KEY` env var (used by tests + local dev), then
-    fall back to SSM `/eco-mcp-app/api-admin-token` in `us-east-1`. Returns
-    `None` if nothing is available — the exporter call will 401 and we'll
-    surface a graceful placeholder.
+    Prefer the `ECO_ADMIN_API_KEY` env var (used by tests, local dev, and
+    the k3s deploy via ExternalSecret). Fall back to SSM
+    `/eco-mcp-app/api-admin-token` in `us-east-1` via boto3 if installed,
+    then via the `aws` CLI. Returns `None` if nothing is available —
+    the exporter call will 401 and we'll surface a graceful placeholder.
     """
     env = os.environ.get("ECO_ADMIN_API_KEY")
     if env:
         return env
+    global _ADMIN_KEY_CACHE, _ADMIN_KEY_LOOKED_UP
+    if _ADMIN_KEY_LOOKED_UP:
+        return _ADMIN_KEY_CACHE
+    _ADMIN_KEY_LOOKED_UP = True
+    _ADMIN_KEY_CACHE = _fetch_admin_key_from_ssm()
+    return _ADMIN_KEY_CACHE
+
+
+def _fetch_admin_key_from_ssm() -> str | None:
+    # boto3 path — only taken if boto3 is installed (it isn't by default,
+    # to keep the prod image slim; the env var path covers k3s).
     try:
         import boto3  # type: ignore[import-not-found]
-    except ImportError:
-        return None
-    try:
-        client = boto3.client("ssm", region_name="us-east-1")
-        resp = client.get_parameter(Name="/eco-mcp-app/api-admin-token", WithDecryption=True)
+
+        client = boto3.client("ssm", region_name=_SSM_REGION)
+        resp = client.get_parameter(Name=_SSM_PARAM_NAME, WithDecryption=True)
         return str(resp["Parameter"]["Value"])
+    except ImportError:
+        pass
     except Exception:
         return None
+    # AWS CLI fallback — zero runtime deps, uses whatever creds + config
+    # the user already has. Primary path for local dev on this repo.
+    import shutil
+    import subprocess
+
+    if not shutil.which("aws"):
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "aws",
+                "ssm",
+                "get-parameter",
+                "--name",
+                _SSM_PARAM_NAME,
+                "--with-decryption",
+                "--region",
+                _SSM_REGION,
+                "--query",
+                "Parameter.Value",
+                "--output",
+                "text",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
 
 
 # --- Cache (SQLite) --------------------------------------------------------
@@ -235,24 +294,53 @@ def _inat_rate_gate() -> None:
 
 
 async def _fetch_inat_taxon(name: str) -> dict[str, Any] | None:
-    """Return iNat's first taxon hit for `name`, or None if zero results."""
+    """Return the best iNat taxon hit for `name`, or None if zero results.
+
+    Queries both species- and genus-level taxa and re-ranks results to
+    prefer an exact (case-insensitive) match on `name`,
+    `preferred_common_name`, or `matched_term` before falling back to
+    iNat's natural ordering. This avoids iNat's full-text search
+    returning an unrelated grass for "Bison" (whose correct hit is the
+    `Bison` genus).
+    """
     cache_key = f"inat:taxon:{name.lower()}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached if cached else None
     _inat_rate_gate()
     url = f"{INAT_BASE_URL}/taxa"
-    params = {"q": name, "rank": "species", "per_page": "1"}
+    params = {
+        "q": name,
+        "rank": "species,genus",
+        "per_page": "10",
+        "is_active": "true",
+        "all_names": "false",
+    }
     headers = {"User-Agent": INAT_USER_AGENT}
     async with httpx.AsyncClient(timeout=8.0) as client:
         resp = await client.get(url, params=params, headers=headers)
         resp.raise_for_status()
         data = resp.json()
     results = data.get("results") or []
-    taxon = results[0] if results else None
+    taxon = _pick_best_taxon(results, name)
     # Cache both hits and misses so we don't re-query for modded names.
     _cache_put(cache_key, taxon or {})
     return taxon
+
+
+def _pick_best_taxon(results: list[dict[str, Any]], query: str) -> dict[str, Any] | None:
+    if not results:
+        return None
+    q = query.strip().lower()
+    for r in results:
+        candidates = [
+            r.get("name"),
+            r.get("preferred_common_name"),
+            r.get("matched_term"),
+        ]
+        if any(isinstance(c, str) and c.lower() == q for c in candidates):
+            return r
+    return results[0]
 
 
 async def _fetch_inat_photo_bytes(url: str) -> bytes | None:

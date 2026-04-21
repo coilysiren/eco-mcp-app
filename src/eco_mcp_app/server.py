@@ -506,8 +506,18 @@ def to_government_payload(
     if cleaned_laws:
         shortest = min(cleaned_laws, key=lambda law: len(law["clean"]))
         longest = max(cleaned_laws, key=lambda law: len(law["clean"]))
-        shortest_law = {"name": shortest["name"], "preview": _law_preview(shortest["clean"])}
-        longest_law = {"name": longest["name"], "preview": _law_preview(longest["clean"])}
+        shortest_preview = _law_preview(shortest["clean"])
+        longest_preview = _law_preview(longest["clean"])
+        shortest_law = {
+            "name": shortest["name"],
+            "preview": shortest_preview,
+            "preview_lines": _law_preview_lines(shortest_preview),
+        }
+        longest_law = {
+            "name": longest["name"],
+            "preview": longest_preview,
+            "preview_lines": _law_preview_lines(longest_preview),
+        }
 
     return {
         "view": "eco_government",
@@ -528,6 +538,26 @@ def _law_preview(text: str, max_chars: int = 600) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars].rstrip() + "…"
+
+
+def _law_preview_lines(text: str) -> list[str]:
+    """Split a law preview into logical entries for bulleted rendering.
+
+    Eco law descriptions emit one clause per newline, but the clause often
+    wraps onto continuation lines that start with whitespace (e.g. the
+    `then Prevent (...)` tail of an `On event ...` rule). We fold those
+    continuations into the preceding entry so each returned string is a
+    single reader-facing bullet.
+    """
+    entries: list[str] = []
+    for raw_line in text.splitlines():
+        if not raw_line.strip():
+            continue
+        if raw_line[:1].isspace() and entries:
+            entries[-1] = f"{entries[-1]} {raw_line.strip()}"
+        else:
+            entries.append(raw_line.strip())
+    return entries
 
 
 def _render_government_card(payload: dict[str, Any]) -> str:

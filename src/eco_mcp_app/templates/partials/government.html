@@ -83,13 +83,29 @@
         {% if gov.shortest_law %}
           <div class="gov-law">
             <div class="gov-law-label">Shortest: <b>{{ gov.shortest_law.name }}</b></div>
-            <div class="gov-law-body">{{ gov.shortest_law.preview }}</div>
+            {% if gov.shortest_law.preview_lines %}
+              <ul class="gov-law-lines">
+                {% for line in gov.shortest_law.preview_lines %}
+                  <li><span class="gov-law-bullet">📝</span>{{ line }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <div class="gov-law-body">{{ gov.shortest_law.preview }}</div>
+            {% endif %}
           </div>
         {% endif %}
         {% if gov.longest_law and gov.longest_law.name != (gov.shortest_law.name if gov.shortest_law else None) %}
           <div class="gov-law">
             <div class="gov-law-label">Longest: <b>{{ gov.longest_law.name }}</b></div>
-            <div class="gov-law-body">{{ gov.longest_law.preview }}</div>
+            {% if gov.longest_law.preview_lines %}
+              <ul class="gov-law-lines">
+                {% for line in gov.longest_law.preview_lines %}
+                  <li><span class="gov-law-bullet">📝</span>{{ line }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <div class="gov-law-body">{{ gov.longest_law.preview }}</div>
+            {% endif %}
           </div>
         {% endif %}
       </div>
@@ -162,6 +178,22 @@
 .gov-law-body {
   font-size: 12px; color: var(--fg); white-space: pre-wrap;
   max-height: 200px; overflow-y: auto; line-height: 1.4;
+}
+.gov-law-lines {
+  list-style: none; padding: 0; margin: 0;
+  font-size: 12px; color: var(--fg); line-height: 1.45;
+  max-height: 240px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.gov-law-lines li {
+  display: flex; align-items: flex-start; gap: 6px;
+  padding: 4px 8px; border-radius: 6px;
+  background: rgba(90, 138, 58, 0.08);
+  border: 1px solid var(--panel-border);
+}
+.gov-law-bullet {
+  flex: 0 0 auto; line-height: 1.2; font-size: 13px;
+  filter: saturate(1.1);
 }
 .gov-footer {
   margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--panel-border);

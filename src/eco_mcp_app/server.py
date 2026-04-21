@@ -35,6 +35,8 @@ from mcp.types import (
 )
 from pydantic import AnyUrl
 
+from . import fair_price as fair_price_mod
+
 DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
 DEFAULT_ECO_PORT = int(os.environ.get("ECO_INFO_PORT", "3001"))
 STEAM_URL = "https://store.steampowered.com/app/382310/Eco/"
@@ -405,6 +407,23 @@ def _render_error(message: str) -> str:
     return _JINJA.get_template("partials/error.html").render(message=message)
 
 
+def _render_fair_price(result: fair_price_mod.FairPriceResult) -> str:
+    return _JINJA.get_template("partials/fair_price.html").render(
+        item=result.item,
+        series_id=result.series_id,
+        display_name=result.display_name,
+        display_unit=result.display_unit,
+        frequency=result.frequency,
+        latest_value=result.latest_value,
+        latest_date=result.latest_date,
+        changes=result.changes,
+        changes_label=result.changes_label,
+        narrative=result.narrative,
+        cached=result.cached,
+        error=result.error,
+    )
+
+
 def _render_shell(prerendered: str | None = None) -> str:
     """Render the iframe shell — what the MCP resource returns.
 
@@ -486,6 +505,41 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             ),
             Tool(
+                name="fair_price",
+                title="Eco — fair-price advisor",
+                description=(
+                    "Advisory real-world fair price for a given Eco item, sourced "
+                    "from FRED commodity series (copper, wheat, lumber, iron, WTI "
+                    "crude oil). Returns a narrative card with cadence-appropriate "
+                    "percent-change figures (daily series get 7d/30d/90d, monthly "
+                    "series get 1m/3m/12m). Advisory only — no in-game enforcement."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "item": {
+                            "type": "string",
+                            "description": (
+                                "Eco item name. Accepts 'Copper', 'CopperIngot', "
+                                "'Wheat', 'Board'/'Lumber', 'Iron'/'IronIngot', "
+                                "'Oil'/'Crude'. Case-insensitive."
+                            ),
+                        },
+                        "cycle_id": {
+                            "type": "string",
+                            "description": (
+                                "Optional cycle identifier (e.g. 'cycle-13') used "
+                                "to look up a stored in-game price calibration. "
+                                "Omit to skip the calibrated-price line."
+                            ),
+                        },
+                    },
+                    "required": ["item"],
+                    "additionalProperties": False,
+                },
+                **{"_meta": UI_META},
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -532,6 +586,26 @@ def build_server() -> Server:
                         text=json.dumps({"servers": KNOWN_PUBLIC_SERVERS}),
                     ),
                 ],
+            )
+
+        if name == "fair_price":
+            item = arguments.get("item") if arguments else None
+            cycle_id = arguments.get("cycle_id") if arguments else None
+            result = await fair_price_mod.fetch_fair_price(item, cycle_id=cycle_id)
+            payload = fair_price_mod.to_payload(result)
+            fragment = _render_fair_price(result)
+            # Tool-level isError surfaces the empty state clearly in hosts that
+            # render the `isError` banner (Claude Desktop does). Data-thinness
+            # isn't a crash, but it *is* a failure from the user's POV.
+            is_error = result.error is not None
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=result.narrative),
+                    TextContent(type="text", text=json.dumps(payload)),
+                    TextContent(type="text", text=HTMX_PREFIX + fragment),
+                ],
+                isError=is_error,
+                **{"_meta": UI_META},
             )
 
         if name != "get_eco_server_status":

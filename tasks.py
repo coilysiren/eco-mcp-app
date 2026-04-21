@@ -32,6 +32,19 @@ def install_desktop(c):  # type: ignore[no-untyped-def]
 
 
 @task
+def harness(c):  # type: ignore[no-untyped-def]
+    """Serve the dev/harness.html that mimics Claude Desktop's MCP Apps host.
+
+    Opens http://localhost:8765/dev/harness.html — an HTML page that embeds the
+    iframe, answers ui/initialize, pushes a canned ui/notifications/tool-result,
+    and listens for ui/notifications/size-changed. Useful for iterating on the
+    iframe without needing to Cmd+Q Claude Desktop every time.
+    """
+    print("Harness: http://localhost:8765/dev/harness.html")
+    c.run("python3 -m http.server 8765")
+
+
+@task
 def ruff(c):  # type: ignore[no-untyped-def]
     """Lint + format (check mode)."""
     c.run("uv run ruff check src tasks.py")

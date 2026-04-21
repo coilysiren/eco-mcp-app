@@ -116,6 +116,40 @@ inv smoke
 Look for: `_meta.ui.resourceUri` in both forms on `id=2`, a real-sized HTML
 resource on `id=3`, and a JSON payload with `"view":"eco_status"` on `id=4`.
 
+## Dev harness (iterate on the iframe without restarting Claude)
+
+`dev/harness.html` is a minimal HTML page that mimics Claude Desktop's MCP Apps
+host so the iframe can be developed in a normal browser — no ⌘Q / relaunch
+cycle per change. The harness:
+
+1. Loads `src/eco_mcp_app/ui/eco.html` as an iframe (`visibility: hidden`).
+2. Listens for `ui/initialize` from the iframe and responds with a valid
+   `McpUiInitializeResult` (protocolVersion, hostInfo, hostCapabilities,
+   hostContext).
+3. On `ui/notifications/initialized`, reveals the iframe.
+4. Listens for `ui/notifications/size-changed` and applies the reported
+   `{width, height}` to `iframe.style.height`. This is the mechanism Claude
+   Desktop actually uses — not the `documentElement.height` read that
+   [claude-ai-mcp#69](https://github.com/anthropics/claude-ai-mcp/issues/69)
+   describes.
+5. After reveal, pushes a canned `ui/notifications/tool-result` with a mock
+   Eco `/info` payload so `render()` runs.
+
+Run it with:
+
+```sh
+inv harness
+# then open http://localhost:8765/dev/harness.html
+```
+
+The status bar at the top of the harness shows the last `size-changed` value
+so you can see whether the iframe is telling the host to resize. If it says
+"Loading…" forever, either the handshake failed or the iframe's script threw
+before reaching `connect()` — check DevTools console.
+
+The harness is also usable from Claude Code's Preview panel via the
+`eco-harness` entry in `.claude/launch.json`.
+
 ## MCP Apps — non-obvious things I learned building this
 
 - `_meta.ui.resourceUri` must be set in **both** nested (`ui.resourceUri`) and

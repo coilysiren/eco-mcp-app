@@ -5,7 +5,8 @@
       "name": "eco-harness",
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8765"],
-      "port": 8765
+      "port": 8765,
+      "url": "/dev/harness.html"
     }
   ]
 }

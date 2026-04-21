@@ -285,7 +285,15 @@
   async function connect() {
     console.log("[eco-mcp-app] sending ui/initialize");
     try {
-      const r = await request("ui/initialize", { protocolVersion: PROTO_VERSION, capabilities: {} });
+      // Per @modelcontextprotocol/ext-apps app.js and the 2026-01-26 spec, the
+      // params are { appInfo, appCapabilities, protocolVersion } — NOT the
+      // { capabilities, protocolVersion } shape from the base MCP initialize.
+      // Missing fields cause the host to silently keep the iframe hidden.
+      const r = await request("ui/initialize", {
+        appInfo: { name: "eco-mcp-app", version: "0.1.0" },
+        appCapabilities: {},
+        protocolVersion: PROTO_VERSION,
+      });
       console.log("[eco-mcp-app] ui/initialize ok:", r);
       send({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
       console.log("[eco-mcp-app] initialized; waiting for ui/notifications/tool-result");

@@ -178,13 +178,20 @@
     border: 1px solid rgba(165, 209, 74, 0.18);
     color: var(--fg-muted); border-radius: 999px; font-size: 11px;
   }
+  /* ---- green footer panel: meta row + credits row ---- */
   .footer {
+    margin-top: 16px; padding: 14px 18px 12px;
+    background: linear-gradient(180deg,
+      rgba(90, 138, 58, 0.18) 0%, rgba(31, 46, 26, 0.72) 100%);
+    border: 1px solid rgba(165, 209, 74, 0.28);
+    border-radius: 12px; backdrop-filter: blur(6px);
+    font-size: 11px; color: var(--fg-muted);
+  }
+  .footer-meta {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; flex-wrap: wrap;
-    margin-top: 14px; padding-top: 14px;
-    border-top: 1px solid rgba(165, 209, 74, 0.12);
-    font-size: 11px; color: var(--fg-faint);
   }
+  .footer-meta code { color: var(--fg); opacity: 0.8; }
   .footer-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .cta {
     display: inline-flex; align-items: center; gap: 6px;
@@ -203,17 +210,17 @@
   .empty { padding: 80px 20px; text-align: center; color: var(--fg-muted); }
   .empty .hint { margin-top: 6px; font-size: 12px; color: var(--fg-faint); }
 
-  /* ---- credits (mirrors coilysiren.me footer, re-palette'd to Eco) ---- */
-  .credits {
-    margin-top: 20px; padding-top: 14px;
-    border-top: 1px dashed rgba(165, 209, 74, 0.18);
-    text-align: center; font-size: 11px; color: var(--fg-faint);
+  /* ---- credits row (inside the green footer panel) ---- */
+  .credits-line {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    align-items: center; justify-content: center;
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px dashed rgba(165, 209, 74, 0.22);
+    color: var(--fg-muted);
   }
-  .credits-line { display: inline-flex; gap: 8px; flex-wrap: wrap;
-    align-items: center; justify-content: center; }
-  .credits a { color: var(--leaf); text-decoration: none;
-    border-bottom: 1px dotted rgba(90, 138, 58, 0.45);
+  .credits-line a { color: var(--leaf-bright); text-decoration: none;
+    border-bottom: 1px dotted rgba(165, 209, 74, 0.55);
     transition: color 120ms ease, border-color 120ms ease; }
-  .credits a:hover { color: var(--leaf-bright);
-    border-bottom-color: var(--leaf-bright); }
-  .credits .sep { color: rgba(165, 209, 74, 0.25); }
+  .credits-line a:hover { color: #c7e87a;
+    border-bottom-color: #c7e87a; }
+  .credits-line .sep { color: rgba(165, 209, 74, 0.4); }

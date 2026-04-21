@@ -39,7 +39,28 @@ DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:
 DEFAULT_ECO_PORT = int(os.environ.get("ECO_INFO_PORT", "3001"))
 STEAM_URL = "https://store.steampowered.com/app/382310/Eco/"
 RESOURCE_URI = "ui://eco/status.html"
+ECONOMY_RESOURCE_URI = "ui://eco/economy.html"
 RESOURCE_MIME = "text/html;profile=mcp-app"
+
+# Economy dashboard: datasets pulled from the admin /datasets/get endpoint.
+# Listed here so both tool wiring and tests share one source of truth; each
+# string must appear in `/datasets/flatlist` on the live server.
+ECONOMY_DATASETS: tuple[str, ...] = (
+    "OfferedLoanOrBond",
+    "AcceptedLoanOrBond",
+    "RepaidLoanOrBond",
+    "DefaultedOnLoanOrBond",
+    "PayWages",
+    "PayRentOrMoveInFee",
+    "PostedContract",
+    "CompletedContract",
+    "FailedContract",
+    "PropertyTransfer",
+    "ReputationTransfer",
+    "TransferMoney",
+    "PayTax",
+    "ReceiveGovernmentFunds",
+)
 
 # Single source of truth for the public servers surfaced both as "try-others"
 # pills on the rendered card and as the `list_public_eco_servers` tool's
@@ -445,6 +466,432 @@ def _format_markdown(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+##
+## Economy dashboard
+##
+## Separate code path from `/info`: hits the admin /datasets/get endpoint
+## (requires X-API-Key header) and /info for cycle-day + EconomyDesc, computes
+## KPIs on top, and renders a dedicated card partial with inline SVG sparklines.
+##
+
+# Base URL for admin endpoints. We derive the admin base from ECO_INFO_URL so a
+# non-default server can be targeted by setting one env var.
+_ADMIN_DEFAULT_BASE = os.environ.get(
+    "ECO_ADMIN_BASE",
+    DEFAULT_ECO_INFO_URL.rsplit("/info", 1)[0],
+)
+
+# SSM secret paths — documented in todo/README.md. Region is pinned us-east-1:
+# the AWS CLI default is us-west-2 and would silently miss these params.
+_SSM_REGION = os.environ.get("AWS_REGION", "us-east-1")
+_ECO_ADMIN_SSM_PATH = os.environ.get("ECO_ADMIN_TOKEN_SSM", "/eco-mcp-app/api-admin-token")
+
+# Admin token cache — loaded once per process at first-use, not per-request.
+# An explicit env var ECO_ADMIN_TOKEN overrides SSM so tests and local dev
+# don't need AWS credentials.
+_admin_token_cache: dict[str, str | None] = {}
+
+
+def _load_admin_token() -> str | None:
+    """Return the Eco admin API token or None if unavailable.
+
+    Order: `ECO_ADMIN_TOKEN` env var → SSM `/eco-mcp-app/api-admin-token` in
+    us-east-1 → None (caller renders the empty-state card). Cached so we
+    don't reach for boto3 on every call.
+    """
+    if "token" in _admin_token_cache:
+        return _admin_token_cache["token"]
+    token = os.environ.get("ECO_ADMIN_TOKEN")
+    if not token:
+        try:
+            import boto3  # type: ignore[import-not-found]
+
+            ssm = boto3.client("ssm", region_name=_SSM_REGION)
+            resp = ssm.get_parameter(Name=_ECO_ADMIN_SSM_PATH, WithDecryption=True)
+            token = resp["Parameter"]["Value"]
+        except Exception:
+            # boto3 missing, no creds, or param not found — all equivalent for
+            # our purposes (we'll render the card with no series).
+            token = None
+    _admin_token_cache["token"] = token
+    return token
+
+
+# Per-process dataset cache. The dashboard is viewed in bursts (user alt-tabs
+# between conversation + iframe), and each render fans out 14 admin requests —
+# without this we'd hammer the Eco server's admin endpoint.
+_ECONOMY_CACHE_TTL_S = float(os.environ.get("ECO_ECONOMY_CACHE_TTL", "45"))
+_economy_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+async def _fetch_dataset(
+    client: httpx.AsyncClient,
+    base: str,
+    name: str,
+    day_end: int,
+    headers: dict[str, str],
+) -> list[tuple[float, float]]:
+    """Fetch a single /datasets/get series. Returns [] on any non-200 or shape surprise.
+
+    Day-3 reality: some series are legitimately empty, and malformed stats
+    return 500. We shouldn't let a single bad series blow up the whole card.
+    """
+    try:
+        url = f"{base}/datasets/get"
+        r = await client.get(
+            url,
+            params={"dataset": name, "dayStart": 0, "dayEnd": max(day_end, 1)},
+            headers=headers,
+        )
+        if r.status_code != 200:
+            return []
+        data = r.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+    # /datasets/get returns either a list of {Time, Value} dicts or a list of
+    # two-item [time, value] pairs — tolerate both shapes defensively.
+    out: list[tuple[float, float]] = []
+    if isinstance(data, list):
+        for pt in data:
+            if isinstance(pt, dict):
+                t = pt.get("Time", pt.get("time"))
+                v = pt.get("Value", pt.get("value"))
+            elif isinstance(pt, list | tuple) and len(pt) >= 2:
+                t, v = pt[0], pt[1]
+            else:
+                continue
+            try:
+                out.append((float(t), float(v)))
+            except (TypeError, ValueError):
+                continue
+    elif isinstance(data, dict):
+        # Sometimes the endpoint wraps points under a "Values" / "Points" key.
+        points = data.get("Values") or data.get("Points") or []
+        for pt in points:
+            try:
+                out.append((float(pt["Time"]), float(pt["Value"])))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return out
+
+
+async def fetch_economy(server: str | None = None) -> dict[str, Any]:
+    """Fetch /info + all ECONOMY_DATASETS series for the given Eco server.
+
+    Shape: `{info, days_elapsed, series: {name: [(t,v), ...]}, admin_ok}`.
+    Never raises for admin-token problems — we degrade to an empty series map
+    and the card renders an "admin token missing" banner.
+    """
+    info_url = normalize_server_url(server)
+    # Derive admin base from the /info URL so the same `server` arg routes both.
+    parsed = urlparse(info_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+
+    cache_key = base
+    now = time.monotonic()
+    cached = _economy_cache.get(cache_key)
+    if cached and (now - cached[0]) < _ECONOMY_CACHE_TTL_S:
+        return dict(cached[1])
+
+    info = await fetch_eco_info(server)
+    # TimeSinceStart is seconds since cycle start; some servers return a float.
+    # One in-game "day" = 3600s by default, but the authoritative number is
+    # `DaysRunning` on /info — match what the rest of the UI already shows.
+    days_elapsed = int(info.get("DaysRunning") or 0)
+    if days_elapsed <= 0:
+        tss = info.get("TimeSinceStart")
+        try:
+            days_elapsed = max(1, int(float(tss) / 3600.0))
+        except (TypeError, ValueError):
+            days_elapsed = 1
+
+    token = _load_admin_token()
+    admin_ok = bool(token)
+    series: dict[str, list[tuple[float, float]]] = {}
+    if token:
+        headers = {"X-API-Key": token}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            import asyncio
+
+            results = await asyncio.gather(
+                *(
+                    _fetch_dataset(client, base, name, days_elapsed, headers)
+                    for name in ECONOMY_DATASETS
+                ),
+                return_exceptions=False,
+            )
+        series = dict(zip(ECONOMY_DATASETS, results, strict=True))
+    else:
+        series = {name: [] for name in ECONOMY_DATASETS}
+
+    out: dict[str, Any] = {
+        "info": info,
+        "days_elapsed": days_elapsed,
+        "series": series,
+        "admin_ok": admin_ok,
+    }
+    _economy_cache[cache_key] = (now, dict(out))
+    return out
+
+
+def _series_total(points: list[tuple[float, float]]) -> float:
+    """Sum of values (count-type stats are already cumulative/per-event)."""
+    return float(sum(v for _, v in points))
+
+
+def _series_last(points: list[tuple[float, float]]) -> float:
+    return float(points[-1][1]) if points else 0.0
+
+
+def _pct(numerator: float, denominator: float) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(100.0 * numerator / denominator, 1)
+
+
+def _stddev(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean = sum(values) / len(values)
+    var = sum((v - mean) ** 2 for v in values) / len(values)
+    return var**0.5
+
+
+def _sparkline_svg(points: list[tuple[float, float]], width: int = 180, height: int = 40) -> str:
+    """Render a series as a minimal inline SVG sparkline.
+
+    Empty / single-point series render as a flat dashed baseline so we always
+    emit a DOM node of the same footprint (prevents layout thrash between
+    empty and filled states).
+    """
+    if len(points) < 2:
+        return (
+            f'<svg class="spark" viewBox="0 0 {width} {height}" '
+            f'preserveAspectRatio="none" role="img" aria-label="no data">'
+            f'<line x1="0" y1="{height // 2}" x2="{width}" y2="{height // 2}" '
+            f'stroke="var(--fg-faint)" stroke-dasharray="3 4" stroke-width="1"/>'
+            f"</svg>"
+        )
+    xs = [t for t, _ in points]
+    ys = [v for _, v in points]
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    x_span = max(x_max - x_min, 1e-9)
+    y_span = max(y_max - y_min, 1e-9)
+    pad = 2
+    coords = []
+    for t, v in points:
+        x = pad + (t - x_min) / x_span * (width - 2 * pad)
+        y = height - pad - (v - y_min) / y_span * (height - 2 * pad)
+        coords.append(f"{x:.1f},{y:.1f}")
+    path = "M " + " L ".join(coords)
+    # Fill area under line for visual weight.
+    area = path + f" L {coords[-1].split(',')[0]},{height - pad} L {pad},{height - pad} Z"
+    return (
+        f'<svg class="spark" viewBox="0 0 {width} {height}" '
+        f'preserveAspectRatio="none" role="img" aria-label="sparkline">'
+        f'<path d="{area}" fill="var(--leaf)" fill-opacity="0.18"/>'
+        f'<path d="{path}" fill="none" stroke="var(--leaf-bright)" '
+        f'stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
+        f"</svg>"
+    )
+
+
+def compute_economy_payload(raw: dict[str, Any]) -> dict[str, Any]:
+    """Turn a fetch_economy() result into the dict consumed by the card template.
+
+    Classification thresholds (per task spec):
+      booming : default rate < 5% AND trades/day up 20% WoW (when we have ≥7d)
+      stressed: default rate > 15% OR contract failure rate > 30%
+      healthy : otherwise
+    """
+    info = raw.get("info") or {}
+    series: dict[str, list[tuple[float, float]]] = raw.get("series") or {}
+    days_elapsed = max(1, int(raw.get("days_elapsed") or 1))
+
+    # KPI primitives.
+    offered_loans = _series_total(series.get("OfferedLoanOrBond", []))
+    accepted_loans = _series_total(series.get("AcceptedLoanOrBond", []))
+    repaid_loans = _series_total(series.get("RepaidLoanOrBond", []))
+    defaulted_loans = _series_total(series.get("DefaultedOnLoanOrBond", []))
+
+    posted_contracts = _series_total(series.get("PostedContract", []))
+    completed_contracts = _series_total(series.get("CompletedContract", []))
+    failed_contracts = _series_total(series.get("FailedContract", []))
+
+    wages = _series_total(series.get("PayWages", []))
+    taxes_paid = _series_total(series.get("PayTax", []))
+    govt_funds = _series_total(series.get("ReceiveGovernmentFunds", []))
+    net_tax_flow = taxes_paid - govt_funds
+
+    # Trades/day: EconomyDesc on /info says "N trades, M contracts" authoritatively.
+    # We parse it for the displayed number because /datasets doesn't have a
+    # `Trade` series (TransferMoney is money transfers, not goods trades).
+    econ_desc = str(info.get("EconomyDesc") or "")
+    trades_total = 0
+    m = re.search(r"(\d+)\s*trade", econ_desc)
+    if m:
+        trades_total = int(m.group(1))
+    trades_per_day = round(trades_total / days_elapsed, 1) if days_elapsed else 0.0
+
+    # Loan default rate — defaults vs (defaulted + repaid) gives the realized
+    # rate; open loans (accepted-but-not-yet-repaid) aren't resolved yet.
+    resolved_loans = defaulted_loans + repaid_loans
+    default_rate = _pct(defaulted_loans, resolved_loans)
+
+    # Contract completion ratio — completed / (completed + failed). Posted-but-
+    # open contracts haven't had a chance to fail yet, so excluding them avoids
+    # a cold-start penalty that would wrongly trigger "stressed".
+    completion_ratio = _pct(completed_contracts, completed_contracts + failed_contracts)
+    failure_rate = _pct(failed_contracts, completed_contracts + failed_contracts)
+
+    # Week-over-week trades/day delta (needs ≥8 days of runtime).
+    trades_wow_pct: float | None = None
+    if days_elapsed >= 8 and trades_total > 0:
+        # We don't have a trades time-series, so this is a best-effort based on
+        # assumed uniform rate since cycle start vs. the last 7 days.
+        # With only cumulative info, we approximate by comparing the trailing
+        # week's implied rate to the overall rate.
+        overall_rate = trades_total / days_elapsed
+        trailing = trades_total - (overall_rate * (days_elapsed - 7))
+        trailing_rate = trailing / 7.0
+        if overall_rate > 0:
+            trades_wow_pct = round(((trailing_rate / overall_rate) - 1.0) * 100.0, 1)
+
+    # Classify.
+    if default_rate > 15.0 or failure_rate > 30.0:
+        health = "stressed"
+    elif default_rate < 5.0 and (trades_wow_pct is not None and trades_wow_pct >= 20.0):
+        health = "booming"
+    else:
+        health = "healthy"
+
+    narrative = (
+        f"Economy is {health} — {default_rate}% default rate, "
+        f"{completion_ratio}% contracts completed"
+    )
+
+    # Sparkline candidates: pick up to 4 series with the highest normalized
+    # stddev (excluding series that have fewer than 2 points). Normalizing by
+    # mean puts small-but-volatile series like DefaultedOnLoanOrBond on equal
+    # footing with high-volume series like TransferMoney.
+    candidates: list[tuple[str, float, list[tuple[float, float]]]] = []
+    for name, pts in series.items():
+        if len(pts) < 2:
+            continue
+        values = [v for _, v in pts]
+        mean = sum(values) / len(values) if values else 0.0
+        sd = _stddev(values)
+        norm = sd / mean if mean > 0 else sd
+        candidates.append((name, norm, pts))
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    sparks = [
+        {
+            "name": name,
+            "label": _HUMAN_STAT_LABELS.get(name, name),
+            "last": _series_last(pts),
+            "total": _series_total(pts),
+            "svg": Markup(_sparkline_svg(pts)),
+        }
+        for name, _sd, pts in candidates[:4]
+    ]
+
+    total_culture = float(info.get("TotalCulture") or 0.0)
+
+    return {
+        "server": {
+            "description": info.get("Description", ""),
+            "category": info.get("Category"),
+            "sourceUrl": info.get("_sourceUrl"),
+        },
+        "days_elapsed": days_elapsed,
+        "admin_ok": bool(raw.get("admin_ok")),
+        "kpis": {
+            "trades_per_day": trades_per_day,
+            "trades_total": trades_total,
+            "contract_completion_ratio": completion_ratio,
+            "contract_failure_rate": failure_rate,
+            "contracts_posted": int(posted_contracts),
+            "contracts_completed": int(completed_contracts),
+            "contracts_failed": int(failed_contracts),
+            "loan_default_rate": default_rate,
+            "loans_offered": int(offered_loans),
+            "loans_accepted": int(accepted_loans),
+            "loans_repaid": int(repaid_loans),
+            "loans_defaulted": int(defaulted_loans),
+            "wages_total": wages,
+            "taxes_paid": taxes_paid,
+            "govt_funds": govt_funds,
+            "net_tax_flow": net_tax_flow,
+            "total_culture": total_culture,
+            "trades_wow_pct": trades_wow_pct,
+        },
+        "sparks": sparks,
+        "health": health,
+        "narrative": narrative,
+        "economy_desc": econ_desc,
+    }
+
+
+# Human-readable labels for the datasets. Keys match ECONOMY_DATASETS.
+_HUMAN_STAT_LABELS: dict[str, str] = {
+    "OfferedLoanOrBond": "Loans offered",
+    "AcceptedLoanOrBond": "Loans accepted",
+    "RepaidLoanOrBond": "Loans repaid",
+    "DefaultedOnLoanOrBond": "Loans defaulted",
+    "PayWages": "Wages paid",
+    "PayRentOrMoveInFee": "Rent & move-in",
+    "PostedContract": "Contracts posted",
+    "CompletedContract": "Contracts completed",
+    "FailedContract": "Contracts failed",
+    "PropertyTransfer": "Property transfers",
+    "ReputationTransfer": "Reputation transfers",
+    "TransferMoney": "Money transfers",
+    "PayTax": "Taxes paid",
+    "ReceiveGovernmentFunds": "Govt. funds paid out",
+}
+
+
+def _render_economy_card(payload: dict[str, Any]) -> str:
+    fetched_at = datetime.now(UTC).astimezone().strftime("%H:%M:%S")
+    return _JINJA.get_template("partials/economy_card.html").render(
+        server=payload["server"],
+        kpis=payload["kpis"],
+        sparks=payload["sparks"],
+        health=payload["health"],
+        narrative=payload["narrative"],
+        admin_ok=payload["admin_ok"],
+        days_elapsed=payload["days_elapsed"],
+        economy_desc=payload["economy_desc"],
+        fetched_at=fetched_at,
+        steam_url=STEAM_URL,
+        banner_src=_BANNER_SRC,
+    )
+
+
+def _format_economy_markdown(payload: dict[str, Any]) -> str:
+    k = payload["kpis"]
+    server = payload["server"].get("description") or payload["server"].get("category") or "Eco"
+    lines = [
+        f"**{server} — economic health: {payload['health']}**",
+        "",
+        payload["narrative"],
+        "",
+        f"- Trades/day: **{k['trades_per_day']}** (total {k['trades_total']:,})",
+        f"- Contracts: {k['contracts_completed']}/{k['contracts_posted']} completed"
+        f" · {k['contract_failure_rate']}% failure rate",
+        f"- Loans: {k['loans_accepted']} accepted / {k['loans_defaulted']} defaulted"
+        f" · {k['loan_default_rate']}% default rate",
+        f"- Wages paid: **{k['wages_total']:,.0f}**",
+        f"- Net tax flow: **{k['net_tax_flow']:+,.0f}**"
+        f" (taxes in {k['taxes_paid']:,.0f} · govt out {k['govt_funds']:,.0f})",
+        f"- Total culture: {k['total_culture']:.1f}",
+    ]
+    if not payload.get("admin_ok"):
+        lines.extend(["", "_Admin token unavailable — series data is empty._"])
+    return "\n".join(lines)
+
+
 def build_server() -> Server:
     """Construct the MCP Server with all handlers registered.
 
@@ -486,6 +933,36 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             ),
             Tool(
+                name="get_eco_economy",
+                title="Eco — economic health dashboard",
+                description=(
+                    "Show live economic vitals for an Eco server: trades/day, "
+                    "contract completion ratio, loan default rate, wages, "
+                    "net tax flow, plus sparklines of the most volatile series. "
+                    "Pulls /datasets/get (admin) + /info. Optional `server` arg "
+                    "targets a non-default server."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": (
+                                "Eco server to query (host, host:port, or full "
+                                "/info URL). Omit to use the default."
+                            ),
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                **{
+                    "_meta": {
+                        "ui": {"resourceUri": ECONOMY_RESOURCE_URI},
+                        "ui/resourceUri": ECONOMY_RESOURCE_URI,
+                    }
+                },
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -509,14 +986,19 @@ def build_server() -> Server:
                 uri=AnyUrl(RESOURCE_URI),
                 name=RESOURCE_URI,
                 mimeType=RESOURCE_MIME,
-            )
+            ),
+            Resource(
+                uri=AnyUrl(ECONOMY_RESOURCE_URI),
+                name=ECONOMY_RESOURCE_URI,
+                mimeType=RESOURCE_MIME,
+            ),
         ]
 
     @server.read_resource()
     async def read_resource(uri: AnyUrl) -> list[ReadResourceContents]:
-        if str(uri) != RESOURCE_URI:
-            raise ValueError(f"Unknown resource: {uri}")
-        return [ReadResourceContents(content=_render_shell(), mime_type=RESOURCE_MIME)]
+        if str(uri) in (RESOURCE_URI, ECONOMY_RESOURCE_URI):
+            return [ReadResourceContents(content=_render_shell(), mime_type=RESOURCE_MIME)]
+        raise ValueError(f"Unknown resource: {uri}")
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
@@ -532,6 +1014,41 @@ def build_server() -> Server:
                         text=json.dumps({"servers": KNOWN_PUBLIC_SERVERS}),
                     ),
                 ],
+            )
+
+        if name == "get_eco_economy":
+            server_arg = arguments.get("server") if arguments else None
+            try:
+                raw = await fetch_economy(server_arg)
+            except httpx.HTTPError as e:
+                err_payload = {"view": "error", "message": f"Could not reach Eco server: {e}"}
+                return CallToolResult(
+                    content=[
+                        TextContent(type="text", text=f"**Eco server unreachable:** {e}"),
+                        TextContent(type="text", text=json.dumps(err_payload)),
+                        TextContent(type="text", text=HTMX_PREFIX + _render_error(str(e))),
+                    ],
+                    isError=True,
+                    **{
+                        "_meta": {
+                            "ui": {"resourceUri": ECONOMY_RESOURCE_URI},
+                            "ui/resourceUri": ECONOMY_RESOURCE_URI,
+                        }
+                    },
+                )
+            payload = compute_economy_payload(raw)
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=_format_economy_markdown(payload)),
+                    TextContent(type="text", text=json.dumps(payload, default=str)),
+                    TextContent(type="text", text=HTMX_PREFIX + _render_economy_card(payload)),
+                ],
+                **{
+                    "_meta": {
+                        "ui": {"resourceUri": ECONOMY_RESOURCE_URI},
+                        "ui/resourceUri": ECONOMY_RESOURCE_URI,
+                    }
+                },
             )
 
         if name != "get_eco_server_status":

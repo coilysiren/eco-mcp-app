@@ -1,0 +1,136 @@
+{# Economic health dashboard card.
+
+   Layout mirrors the status card's general shape (banner → narrative →
+   KPI grid → sparkline grid → footer), but the data pipeline is separate:
+   the tool fans out to the admin /datasets/get endpoint and we compute KPIs
+   server-side so the template stays a dumb renderer.
+
+   Day-3 reality: every series can legitimately be empty. Every block below
+   checks its data before rendering and falls back to "—" / "no data yet"
+   rather than crashing on zero. #}
+<div class="banner-wrap">
+  <a href="{{ steam_url }}" target="_blank" rel="noopener">
+    <img src="{{ banner_src }}" alt="Eco">
+    <div class="banner-overlay">
+      <div class="banner-title">Economic health</div>
+      <div class="banner-sub">
+        {{ server.description or server.category or "Eco server" }}
+        · cycle day {{ days_elapsed }}
+      </div>
+    </div>
+    <span class="banner-badge econ-badge econ-{{ health }}">
+      <span class="dot"></span>{{ health }}
+    </span>
+  </a>
+</div>
+
+<div class="about narrative narrative-{{ health }}">
+  {{ narrative }}
+  {%- if economy_desc %} · <b>{{ economy_desc }}</b>{% endif %}
+  {%- if not admin_ok %}
+  <div class="hint" style="margin-top:6px">
+    Admin token unavailable — showing aggregate /info numbers only. Set the
+    <code>ECO_ADMIN_TOKEN</code> env var or SSM <code>/eco-mcp-app/api-admin-token</code>.
+  </div>
+  {%- endif %}
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-label">Trades / day</div>
+    <div class="card-val">{{ kpis.trades_per_day }}</div>
+    <div class="card-sub">
+      {% if kpis.trades_total %}
+        {{ '{:,}'.format(kpis.trades_total) }} total
+      {%- if kpis.trades_wow_pct is not none %}
+        · {{ '%+.1f' % kpis.trades_wow_pct }}% vs avg
+      {%- endif %}
+      {% else %}no trades recorded yet{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Contract completion</div>
+    <div class="card-val">
+      {% if kpis.contracts_completed or kpis.contracts_failed %}
+        {{ kpis.contract_completion_ratio }}%
+      {% else %}—{% endif %}
+    </div>
+    <div class="card-sub">
+      {{ kpis.contracts_completed }} completed
+      · {{ kpis.contracts_failed }} failed
+      · {{ kpis.contracts_posted }} posted
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Loan default rate</div>
+    <div class="card-val">
+      {% if kpis.loans_defaulted or kpis.loans_repaid %}
+        {{ kpis.loan_default_rate }}%
+      {% else %}—{% endif %}
+    </div>
+    <div class="card-sub">
+      {{ kpis.loans_accepted }} accepted
+      · {{ kpis.loans_repaid }} repaid
+      · {{ kpis.loans_defaulted }} defaulted
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Wages paid</div>
+    <div class="card-val">{{ fmt(kpis.wages_total) }}</div>
+    <div class="card-sub">
+      culture {{ '%.1f' % kpis.total_culture }}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Net tax flow</div>
+    <div class="card-val">{{ '%+d' % kpis.net_tax_flow }}</div>
+    <div class="card-sub">
+      in {{ fmt(kpis.taxes_paid) }} · out {{ fmt(kpis.govt_funds) }}
+    </div>
+  </div>
+</div>
+
+{# Sparklines — only shown when we have actual data. #}
+{% if sparks %}
+<div class="grid spark-grid">
+  {% for s in sparks %}
+  <div class="card spark-card">
+    <div class="card-label">{{ s.label }}</div>
+    <div class="card-val">{{ fmt(s.total) }}</div>
+    {{ s.svg }}
+    <div class="card-sub">latest {{ '%.0f' % s.last }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty" style="margin-top:14px">
+  <strong style="color:var(--leaf-bright)">No time-series data yet</strong>
+  <div class="hint">
+    It's early in the cycle (day {{ days_elapsed }}). Sparklines will populate
+    as the server records activity.
+  </div>
+</div>
+{% endif %}
+
+<div class="footer">
+  <div class="footer-meta">
+    <span>
+      Fetched {{ fetched_at }} · {{ ECONOMY_DATASETS_COUNT or 14 }} datasets
+      {%- if server.sourceUrl %} · <code>{{ server.sourceUrl }}</code>{% endif %}
+    </span>
+    <div class="footer-actions">
+      <a class="cta steam" href="{{ steam_url }}" target="_blank" rel="noopener">Eco on Steam ↗</a>
+    </div>
+  </div>
+  <div class="credits-line">
+    <span>Built by <a href="https://www.coilysiren.me/" target="_blank" rel="noopener">Kai Siren</a></span>
+    <span class="sep">·</span>
+    <a href="https://github.com/coilysiren/eco-mcp-app" target="_blank" rel="noopener">source on GitHub ↗</a>
+    <span class="sep">·</span>
+    <span>Eco is &copy; <a href="https://www.strangeloopgames.com/" target="_blank" rel="noopener">StrangeLoopGames</a> — unofficial fan tool</span>
+  </div>
+</div>

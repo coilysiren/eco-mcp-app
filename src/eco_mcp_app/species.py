@@ -138,27 +138,83 @@ def clean_species_name(species_id: str) -> str:
 # --- Admin API key ---------------------------------------------------------
 
 
+_SSM_PARAM_NAME = "/eco-mcp-app/api-admin-token"
+_SSM_REGION = "us-east-1"
+
+# Cached for the life of the process — SSM round-trips are slow and the
+# token doesn't rotate mid-request. `None` means "not yet looked up";
+# an empty string means "looked up, nothing available".
+_ADMIN_KEY_CACHE: str | None = None
+_ADMIN_KEY_LOOKED_UP = False
+
+
 def _get_admin_api_key() -> str | None:
     """Fetch the admin API key.
 
-    Prefer the `ECO_ADMIN_API_KEY` env var (used by tests + local dev), then
-    fall back to SSM `/eco-mcp-app/api-admin-token` in `us-east-1`. Returns
-    `None` if nothing is available — the exporter call will 401 and we'll
-    surface a graceful placeholder.
+    Prefer the `ECO_ADMIN_API_KEY` env var (used by tests, local dev, and
+    the k3s deploy via ExternalSecret). Fall back to SSM
+    `/eco-mcp-app/api-admin-token` in `us-east-1` via boto3 if installed,
+    then via the `aws` CLI. Returns `None` if nothing is available —
+    the exporter call will 401 and we'll surface a graceful placeholder.
     """
     env = os.environ.get("ECO_ADMIN_API_KEY")
     if env:
         return env
+    global _ADMIN_KEY_CACHE, _ADMIN_KEY_LOOKED_UP
+    if _ADMIN_KEY_LOOKED_UP:
+        return _ADMIN_KEY_CACHE
+    _ADMIN_KEY_LOOKED_UP = True
+    _ADMIN_KEY_CACHE = _fetch_admin_key_from_ssm()
+    return _ADMIN_KEY_CACHE
+
+
+def _fetch_admin_key_from_ssm() -> str | None:
+    # boto3 path — only taken if boto3 is installed (it isn't by default,
+    # to keep the prod image slim; the env var path covers k3s).
     try:
         import boto3  # type: ignore[import-not-found]
-    except ImportError:
-        return None
-    try:
-        client = boto3.client("ssm", region_name="us-east-1")
-        resp = client.get_parameter(Name="/eco-mcp-app/api-admin-token", WithDecryption=True)
+
+        client = boto3.client("ssm", region_name=_SSM_REGION)
+        resp = client.get_parameter(Name=_SSM_PARAM_NAME, WithDecryption=True)
         return str(resp["Parameter"]["Value"])
+    except ImportError:
+        pass
     except Exception:
         return None
+    # AWS CLI fallback — zero runtime deps, uses whatever creds + config
+    # the user already has. Primary path for local dev on this repo.
+    import shutil
+    import subprocess
+
+    if not shutil.which("aws"):
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "aws",
+                "ssm",
+                "get-parameter",
+                "--name",
+                _SSM_PARAM_NAME,
+                "--with-decryption",
+                "--region",
+                _SSM_REGION,
+                "--query",
+                "Parameter.Value",
+                "--output",
+                "text",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
 
 
 # --- Cache (SQLite) --------------------------------------------------------

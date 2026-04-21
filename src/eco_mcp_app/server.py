@@ -96,8 +96,7 @@ def to_payload(info: dict[str, Any]) -> dict[str, Any]:
         },
         "playtimesPattern": info.get("Playtimes", ""),
         "achievements": [
-            {"name": k, "text": v}
-            for k, v in (info.get("ServerAchievementsDict") or {}).items()
+            {"name": k, "text": v} for k, v in (info.get("ServerAchievementsDict") or {}).items()
         ],
     }
 
@@ -112,8 +111,7 @@ def _format_markdown(payload: dict[str, Any]) -> str:
         "",
         f"- Online: **{p['online']} / {p['total']}** players"
         f" (peak {p['peakActive']}, active {p['activeAndOnline']})",
-        f"- Days until meteor: **{c['daysUntilMeteor']}**"
-        + (" ☄" if c["hasMeteor"] else ""),
+        f"- Days until meteor: **{c['daysUntilMeteor']}**" + (" ☄" if c["hasMeteor"] else ""),
         f"- World: {w['size']} · {w['plants']:,} plants · {w['animals']:,} animals"
         f" · {w['laws']} law{'s' if w['laws'] != 1 else ''}"
         f" · culture {w['totalCulture']:.1f}",

@@ -7,7 +7,7 @@ Timestamp: 2026-04-20 ~15:28 PT
 Claude Code Desktop (CCD) — the client Kai is using right now — **does not
 advertise `extensions.io.modelcontextprotocol/ui` MCP capability**. This was
 confirmed in the previous session (`c952c964`) by teeing the JSON-RPC init
-traffic via `MCP_RPC_LOG=/Users/kai/.sibling-mcp-app-rpc.log`.
+traffic via `MCP_RPC_LOG=/Users/kai/.eco-mcp-app-rpc.log`.
 
 CCD's `clientInfo.name` is `local-agent-mode-sibling-mcp-app` (or similar per
 MCP). Its initialize capabilities are only `{"roots":{"listChanged":true}}`.
@@ -96,11 +96,11 @@ but available to host), CCD would ignore it.
 
 ## Key files touched so far in this investigation
 
-- `~/projects/sibling-mcp-app/investigation/1776723700_00_bootstrap.md`
-- `~/projects/sibling-mcp-app/investigation/1776723900_01_github_issues_digest.md`
-- `~/projects/sibling-mcp-app/investigation/1776724300_02_client_identity_plot_twist.md`
-- `~/projects/sibling-mcp-app/investigation/1776724600_03_prior_session_summary.md`
-- `~/projects/sibling-mcp-app/investigation/1776724900_04_master_findings.md` ← this one
+- `~/projects/coilysiren/eco-mcp-app/investigation/1776723700_00_bootstrap.md`
+- `~/projects/coilysiren/eco-mcp-app/investigation/1776723900_01_github_issues_digest.md`
+- `~/projects/coilysiren/eco-mcp-app/investigation/1776724300_02_client_identity_plot_twist.md`
+- `~/projects/coilysiren/eco-mcp-app/investigation/1776724600_03_prior_session_summary.md`
+- `~/projects/coilysiren/eco-mcp-app/investigation/1776724900_04_master_findings.md` ← this one
 
 ## Saved issue JSON dumps
 

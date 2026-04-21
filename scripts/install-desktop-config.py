@@ -10,7 +10,6 @@ Usage: python scripts/install-desktop-config.py
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
 from datetime import datetime
@@ -19,20 +18,16 @@ from pathlib import Path
 
 def main() -> int:
     cfg_path = (
-        Path.home()
-        / "Library"
-        / "Application Support"
-        / "Claude"
-        / "claude_desktop_config.json"
+        Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
     )
     if not cfg_path.exists():
-        print(f"[eco-mcp-app] {cfg_path} does not exist — open Claude Desktop once first.",
-              file=sys.stderr)
+        print(
+            f"[eco-mcp-app] {cfg_path} does not exist — open Claude Desktop once first.",
+            file=sys.stderr,
+        )
         return 1
 
-    backup = cfg_path.with_suffix(
-        f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    )
+    backup = cfg_path.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     shutil.copy2(cfg_path, backup)
     print(f"[eco-mcp-app] backed up config to {backup.name}")
 

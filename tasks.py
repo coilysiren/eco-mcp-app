@@ -56,3 +56,9 @@ def fmt(c):  # type: ignore[no-untyped-def]
     """Apply ruff formatting."""
     c.run("uv run ruff check --fix src tasks.py")
     c.run("uv run ruff format src tasks.py")
+
+
+@task
+def precommit(c):  # type: ignore[no-untyped-def]
+    """Run all pre-commit hooks against every file."""
+    c.run("uv run pre-commit run --all-files")

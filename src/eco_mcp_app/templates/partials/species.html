@@ -1,0 +1,57 @@
+{# Species profile card: iNat photo + taxonomy + live population curve. #}
+<div class="species-card">
+  <div class="species-header">
+    {% if photo_data_uri %}
+    <img class="species-photo" src="{{ photo_data_uri }}" alt="{{ name }}" />
+    {% else %}
+    <div class="species-photo species-photo--missing">no photo</div>
+    {% endif %}
+    <div class="species-title">
+      <div class="card-label">Species</div>
+      <div class="card-val">{{ name }}</div>
+      <div class="card-sub">
+        <code>{{ species_id }}</code>
+        {% if source == "inat" %}· iNaturalist{% elif source == "wikipedia" %}· Wikipedia{% else %}· no external match{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if wiki_extract %}
+  <p class="species-extract">{{ wiki_extract }}</p>
+  {% endif %}
+
+  {% if taxonomy %}
+  <div class="species-taxonomy">
+    {% for step in taxonomy %}
+      {% if not loop.first %}<span class="species-tax-sep"> &rsaquo; </span>{% endif %}
+      <span class="species-tax-step" title="{{ step.rank }}">{{ step.name }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if conservation_status %}
+  <div class="species-conservation">Conservation: <strong>{{ conservation_status }}</strong></div>
+  {% endif %}
+
+  <div class="species-pop">
+    <div class="card-label">Live population</div>
+    {% if population %}
+    <div class="card-val">{{ population_latest }}</div>
+    <div class="card-sub">
+      day {{ '%.1f' % population[0].day }} → day {{ '%.1f' % population[-1].day }} ·
+      {% if population_delta is not none %}
+        {% if population_delta > 0 %}+{% endif %}{{ population_delta }} from first sample
+      {% endif %}
+    </div>
+    {{ sparkline_svg | safe }}
+    {% else %}
+    <div class="card-sub">
+      {% if error %}{{ error }}{% else %}no samples yet (cycle is young){% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if wiki_url %}
+  <div class="species-links"><a href="{{ wiki_url }}">Wikipedia</a></div>
+  {% endif %}
+</div>

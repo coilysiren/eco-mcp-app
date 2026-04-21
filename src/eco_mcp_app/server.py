@@ -35,6 +35,7 @@ from mcp.types import (
 )
 from pydantic import AnyUrl
 
+from . import species as species_mod
 from .map import build_map_payload, fetch_map_bundle
 
 DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
@@ -561,6 +562,123 @@ def _format_map_markdown(payload: dict[str, Any]) -> str:
         lines.append(f"- Owners: {shown}{more}")
     if payload.get("sourceUrl"):
         lines.append(f"- Source: `{payload['sourceUrl']}`")
+    return "\n".join(lines)
+
+
+def _resolve_species_id(name: str) -> str:
+    """Turn user input into a CamelCase species id.
+
+    Accepts `WheatSpecies` (pass-through), `Wheat` (add suffix), or
+    `Snapping Turtle` (CamelCase-join + suffix). The exporter endpoint only
+    speaks the raw CamelCase form.
+    """
+    s = (name or "").strip()
+    if not s:
+        return ""
+    if " " not in s and s.endswith("Species"):
+        return s
+    if " " not in s and s[:1].isupper() and not s.isupper():
+        # Looks like `Wheat` / `Bison` — single-word common name.
+        return f"{s}Species"
+    # Spaces present or all-lowercase: split, title-case, join.
+    parts = [p for p in re.split(r"\s+", s) if p]
+    joined = "".join(p[:1].upper() + p[1:].lower() for p in parts)
+    if not joined.endswith("Species"):
+        joined += "Species"
+    return joined
+
+
+def _render_sparkline_svg(
+    samples: list[tuple[float, int]],
+    width: int = 320,
+    height: int = 60,
+) -> Markup:
+    """Inline SVG sparkline for a species population series.
+
+    Done as SVG (not Chart.js) because Claude Desktop's CSP blocks external
+    script origins — no-dep SVG is the lowest-risk path that still looks fine.
+    """
+    if not samples:
+        return Markup("")
+    xs = [s[0] for s in samples]
+    ys = [s[1] for s in samples]
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    x_range = x_max - x_min or 1.0
+    y_range = y_max - y_min or 1.0
+    pad = 4
+    points: list[str] = []
+    for x, y in samples:
+        px = pad + (x - x_min) / x_range * (width - 2 * pad)
+        py = height - pad - (y - y_min) / y_range * (height - 2 * pad)
+        points.append(f"{px:.1f},{py:.1f}")
+    poly = " ".join(points)
+    return Markup(
+        f'<svg class="species-spark" viewBox="0 0 {width} {height}" '
+        f'width="100%" height="{height}" preserveAspectRatio="none" '
+        'xmlns="http://www.w3.org/2000/svg">'
+        f'<polyline fill="none" stroke="var(--accent, #4ade80)" '
+        f'stroke-width="2" points="{poly}" />'
+        "</svg>"
+    )
+
+
+def _render_species_card(payload: dict[str, Any]) -> str:
+    population = payload.get("population") or []
+    samples = [(float(p["day"]), int(p["value"])) for p in population]
+    spark = _render_sparkline_svg(samples)
+    ctx = {
+        "name": payload.get("name") or payload.get("speciesId") or "Species",
+        "species_id": payload.get("speciesId") or "",
+        "photo_data_uri": payload.get("photoDataUri"),
+        "wiki_extract": payload.get("wikiExtract"),
+        "wiki_url": payload.get("wikiUrl"),
+        "source": payload.get("source") or "none",
+        "taxonomy": payload.get("taxonomy") or [],
+        "conservation_status": payload.get("conservationStatus"),
+        "population": population,
+        "population_latest": payload.get("populationLatest"),
+        "population_delta": payload.get("populationDelta"),
+        "sparkline_svg": spark,
+        "error": payload.get("error"),
+    }
+    return _JINJA.get_template("partials/species.html").render(**ctx)
+
+
+def _format_species_markdown(payload: dict[str, Any]) -> str:
+    lines = [f"**{payload.get('name', 'Species')}** — `{payload.get('speciesId', '?')}`"]
+    source = payload.get("source") or "none"
+    if source == "inat":
+        lines.append("- Source: iNaturalist")
+    elif source == "wikipedia":
+        lines.append("- Source: Wikipedia (no iNat match)")
+    else:
+        lines.append("- Source: none (modded or fictional species)")
+    taxonomy = payload.get("taxonomy") or []
+    if taxonomy:
+        lines.append("- Taxonomy: " + " > ".join(t["name"] for t in taxonomy))
+    if payload.get("conservationStatus"):
+        lines.append(f"- Conservation: {payload['conservationStatus']}")
+    if payload.get("wikiExtract"):
+        lines.append("")
+        lines.append(payload["wikiExtract"])
+        lines.append("")
+    population = payload.get("population") or []
+    if population:
+        first = payload.get("populationFirst")
+        latest = payload.get("populationLatest")
+        delta = payload.get("populationDelta")
+        lines.append(
+            f"- Population: {first} → {latest}"
+            f" (Δ {'+' if (delta or 0) > 0 else ''}{delta})"
+            f" across {len(population)} samples"
+        )
+    elif payload.get("error"):
+        lines.append(f"- Population: _{payload['error']}_")
+    else:
+        lines.append("- Population: no samples yet")
+    if payload.get("wikiUrl"):
+        lines.append(f"- [Wikipedia]({payload['wikiUrl']})")
     return "\n".join(lines)
 
 
@@ -1157,6 +1275,34 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             ),
             Tool(
+                name="get_eco_species",
+                title="Eco — species profile",
+                description=(
+                    "Show a species profile card for an Eco game species: "
+                    "real-world photo + taxonomy from iNaturalist (Wikipedia "
+                    "fallback for species iNat can't match), plus a line chart "
+                    "of the live in-server population from the admin exporter. "
+                    "Accepts either the raw CamelCase id (`BisonSpecies`) or a "
+                    "human name (`Bison`, `Snapping Turtle`). Modded species "
+                    "without an iNat hit render a graceful fallback card."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": (
+                                "Species id or common name. Accepts "
+                                "`WheatSpecies`, `Wheat`, `Snapping Turtle`, etc."
+                            ),
+                        },
+                    },
+                    "required": ["name"],
+                    "additionalProperties": False,
+                },
+                **{"_meta": UI_META},
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -1267,6 +1413,35 @@ def build_server() -> Server:
                     TextContent(type="text", text=_format_map_markdown(payload)),
                     TextContent(type="text", text=json.dumps(json_payload)),
                     TextContent(type="text", text=HTMX_PREFIX + _render_map(payload)),
+                ],
+                **{"_meta": UI_META},
+            )
+
+        if name == "get_eco_species":
+            species_arg = (arguments or {}).get("name") or ""
+            species_id = _resolve_species_id(species_arg)
+            try:
+                species_payload_obj = await species_mod.build_species_payload(species_id)
+            except httpx.HTTPError as e:
+                err_payload = {"view": "error", "message": f"Could not fetch species: {e}"}
+                return CallToolResult(
+                    content=[
+                        TextContent(type="text", text=f"**Species fetch failed:** {e}"),
+                        TextContent(type="text", text=json.dumps(err_payload)),
+                        TextContent(type="text", text=HTMX_PREFIX + _render_error(str(e))),
+                    ],
+                    isError=True,
+                    **{"_meta": UI_META},
+                )
+            species_payload = species_payload_obj.to_dict()
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=_format_species_markdown(species_payload)),
+                    TextContent(type="text", text=json.dumps(species_payload)),
+                    TextContent(
+                        type="text",
+                        text=HTMX_PREFIX + _render_species_card(species_payload),
+                    ),
                 ],
                 **{"_meta": UI_META},
             )

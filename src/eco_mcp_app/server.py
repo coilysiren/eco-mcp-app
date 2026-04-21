@@ -35,6 +35,8 @@ from mcp.types import (
 )
 from pydantic import AnyUrl
 
+from . import ecoregion as ecoregion_mod
+
 DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
 DEFAULT_ECO_PORT = int(os.environ.get("ECO_INFO_PORT", "3001"))
 STEAM_URL = "https://store.steampowered.com/app/382310/Eco/"
@@ -405,6 +407,126 @@ def _render_error(message: str) -> str:
     return _JINJA.get_template("partials/error.html").render(message=message)
 
 
+# Circumference of the donut's r=40 circle — baked in so Jinja can reference
+# it as a plain number without us having to expose math.pi as a template global.
+_DONUT_CIRCUMFERENCE = 2 * 3.141592653589793 * 40
+
+
+def _render_ecoregion_card(payload: dict[str, Any]) -> str:
+    """Render the biodiversity + ecoregion card fragment."""
+    biomes = payload.get("biomes") or []
+    raw_sum = float(payload.get("rawSumPercent") or 0.0)
+    # Build donut slices. stroke-dasharray draws a length, skips the rest of
+    # the circumference. offset positions each arc so consecutive slices
+    # don't overlap. dashoffset is subtracted (negative moves clockwise).
+    slices: list[dict[str, Any]] = []
+    cursor_pct = 0.0
+    for b in biomes:
+        pct = float(b.get("percent") or 0.0)
+        if pct <= 0:
+            continue
+        # "as a fraction of 100" — we draw percent-of-world, so the donut is
+        # only partly filled when biomes don't sum to 100. That's intentional
+        # and the hint text calls it out.
+        length = _DONUT_CIRCUMFERENCE * (pct / 100.0)
+        slices.append(
+            {
+                "color": b.get("color"),
+                "length": length,
+                "gap": _DONUT_CIRCUMFERENCE - length,
+                "offset": -_DONUT_CIRCUMFERENCE * (cursor_pct / 100.0),
+            }
+        )
+        cursor_pct += pct
+    ctx = {
+        "biomes": biomes,
+        "biomes_have_data": any(float(b.get("percent") or 0.0) > 0 for b in biomes),
+        "donut_slices": slices,
+        "raw_sum_percent": raw_sum,
+        "unclassified_percent": float(payload.get("unclassifiedPercent") or 0.0),
+        "ecoregion_matches": payload.get("ecoregionMatches") or [],
+        "drift_boom": (payload.get("drift") or {}).get("boom") or [],
+        "drift_bust": (payload.get("drift") or {}).get("bust") or [],
+        "species_seen": (payload.get("drift") or {}).get("speciesSeen") or 0,
+        "species_with_drift": (payload.get("drift") or {}).get("speciesWithDrift") or 0,
+        "admin_available": bool(payload.get("adminAvailable")),
+        "source_url": payload.get("sourceUrl"),
+    }
+    return _JINJA.get_template("partials/ecoregion_card.html").render(**ctx)
+
+
+def _format_ecoregion_markdown(payload: dict[str, Any]) -> str:
+    """Plain-text fallback for hosts without MCP Apps iframe support."""
+    lines = ["**Biome composition**"]
+    for b in payload.get("biomes") or []:
+        pct = float(b.get("percent") or 0.0)
+        if pct > 0:
+            lines.append(f"- {b['display']}: {pct:.0f}%")
+    unc = float(payload.get("unclassifiedPercent") or 0.0)
+    if unc > 0:
+        lines.append(f"- _Unclassified / mixed terrain: {unc:.0f}%_")
+    lines += ["", "**Closest real-world ecoregions**"]
+    for m in payload.get("ecoregionMatches") or []:
+        lines.append(f"- {m['name']} (sim {m['similarity']:.2f}) — {m['description']}")
+    drift = payload.get("drift") or {}
+    lines += ["", "**Biodiversity drift**"]
+    if not payload.get("adminAvailable"):
+        lines.append("- Admin endpoints unavailable; configure the API key.")
+    elif (drift.get("speciesWithDrift") or 0) == 0:
+        lines.append(f"- Drift minimal so far across {drift.get('speciesSeen') or 0} species.")
+    else:
+        if drift.get("boom"):
+            lines.append(
+                "- Boom: "
+                + ", ".join(f"{d['name']} {d['deltaRel'] * 100:+.0f}%" for d in drift["boom"])
+            )
+        if drift.get("bust"):
+            lines.append(
+                "- Bust: "
+                + ", ".join(f"{d['name']} {d['deltaRel'] * 100:+.0f}%" for d in drift["bust"])
+            )
+    return "\n".join(lines)
+
+
+# SSM fetch is lazy + best-effort. If boto3 isn't installed or the param is
+# missing we just render without the drift section (public endpoints still
+# work). Per CLAUDE.md the param lives in us-east-1 — AWS CLI default is
+# us-west-2 so the region must be pinned explicitly.
+_ECO_ADMIN_TOKEN_PARAM = "/eco-mcp-app/api-admin-token"
+_ECO_ADMIN_TOKEN: str | None = None
+_ECO_ADMIN_TOKEN_LOADED = False
+
+
+def _get_admin_token() -> str | None:
+    """Fetch + memoize the Eco admin API key.
+
+    Order of precedence:
+    1. ``ECO_ADMIN_TOKEN`` env var — wins for local dev + tests.
+    2. SSM ``/eco-mcp-app/api-admin-token`` in us-east-1 (per CLAUDE.md).
+
+    On any failure returns None and the drift strip renders its empty state.
+    """
+    global _ECO_ADMIN_TOKEN, _ECO_ADMIN_TOKEN_LOADED
+    if _ECO_ADMIN_TOKEN_LOADED:
+        return _ECO_ADMIN_TOKEN
+    _ECO_ADMIN_TOKEN_LOADED = True
+    env = os.environ.get("ECO_ADMIN_TOKEN")
+    if env:
+        _ECO_ADMIN_TOKEN = env
+        return env
+    try:
+        import boto3  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        client = boto3.client("ssm", region_name="us-east-1")
+        resp = client.get_parameter(Name=_ECO_ADMIN_TOKEN_PARAM, WithDecryption=True)
+        _ECO_ADMIN_TOKEN = resp["Parameter"]["Value"]
+    except Exception:
+        _ECO_ADMIN_TOKEN = None
+    return _ECO_ADMIN_TOKEN
+
+
 def _render_shell(prerendered: str | None = None) -> str:
     """Render the iframe shell — what the MCP resource returns.
 
@@ -486,6 +608,34 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             ),
             Tool(
+                name="get_eco_ecoregion",
+                title="Eco — biodiversity & ecoregion match",
+                description=(
+                    "Classify the world's biome composition against real-world "
+                    "WWF ecoregions and show per-species population drift since "
+                    "cycle start. Renders a donut chart of biome percentages, "
+                    "the top-3 matching ecoregions by cosine similarity, and "
+                    "boom/bust species lists (when the admin API key is "
+                    "configured). Defaults to the server configured via "
+                    "ECO_INFO_URL; pass `server` to target a different one."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": (
+                                "Eco server to query. Accepts a bare host or IP, "
+                                "host:port, or a full `/info` URL. Omit to use "
+                                "the configured default."
+                            ),
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                **{"_meta": UI_META},
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -532,6 +682,36 @@ def build_server() -> Server:
                         text=json.dumps({"servers": KNOWN_PUBLIC_SERVERS}),
                     ),
                 ],
+            )
+
+        if name == "get_eco_ecoregion":
+            server_arg = arguments.get("server") if arguments else None
+            info_url = normalize_server_url(server_arg)
+            try:
+                payload = await ecoregion_mod.gather_ecoregion_payload(
+                    info_url, api_key=_get_admin_token()
+                )
+            except httpx.HTTPError as e:
+                err_payload = {
+                    "view": "error",
+                    "message": f"Could not reach Eco worldlayers endpoint: {e}",
+                }
+                return CallToolResult(
+                    content=[
+                        TextContent(type="text", text=f"**Eco worldlayers unreachable:** {e}"),
+                        TextContent(type="text", text=json.dumps(err_payload)),
+                        TextContent(type="text", text=HTMX_PREFIX + _render_error(str(e))),
+                    ],
+                    isError=True,
+                    **{"_meta": UI_META},
+                )
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=_format_ecoregion_markdown(payload)),
+                    TextContent(type="text", text=json.dumps(payload)),
+                    TextContent(type="text", text=HTMX_PREFIX + _render_ecoregion_card(payload)),
+                ],
+                **{"_meta": UI_META},
             )
 
         if name != "get_eco_server_status":

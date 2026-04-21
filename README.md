@@ -183,8 +183,6 @@ each URL in bare form for plain-text viewers. (CommonMark reference
 definitions have to start at the beginning of a line, so they can't be
 combined onto one line with a visible URL — hence the two blocks.)
 
-[1] https://www.coilysiren.me/
-[2] https://modelcontextprotocol.io/docs/concepts/apps
 [3] https://github.com/modelcontextprotocol/ext-apps
 [4] https://play.eco/
 [5] https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx
@@ -202,7 +200,11 @@ combined onto one line with a visible URL — hence the two blocks.)
 [17] https://github.com/anthropics/claude-ai-mcp/issues/40
 
 [1]: https://www.coilysiren.me/
+- \[1\]: https://www.coilysiren.me/
+
 [2]: https://modelcontextprotocol.io/docs/concepts/apps
+- \[2\] https://modelcontextprotocol.io/docs/concepts/apps
+
 [3]: https://github.com/modelcontextprotocol/ext-apps
 [4]: https://play.eco/
 [5]: https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx

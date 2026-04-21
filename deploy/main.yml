@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${NAME}-app
+  namespace: ${NAME}
+  labels:
+    app: ${NAME}-app
+spec:
+  selector:
+    matchLabels:
+      app: ${NAME}-app
+  template:
+    metadata:
+      labels:
+        app: ${NAME}-app
+    spec:
+      imagePullSecrets:
+        - name: docker-registry
+      containers:
+        - name: ${NAME}
+          image: ${IMAGE}
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          env:
+            - name: PORT
+              value: "80"
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${NAME}-service
+  namespace: ${NAME}
+  annotations:
+    tailscale.com/expose: "true"
+spec:
+  type: ClusterIP
+  selector:
+    app: ${NAME}-app
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${NAME}-ingress
+  namespace: ${NAME}
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+    kubernetes.io/tls-acme: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - ${DNS_NAME}
+      secretName: ${NAME}-tls
+  rules:
+    - host: ${DNS_NAME}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ${NAME}-service
+                port:
+                  number: 80

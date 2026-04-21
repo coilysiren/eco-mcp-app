@@ -1,0 +1,63 @@
+name: build-publish-deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: name=coilysiren-eco-mcp-app make .build-docker
+      - run: docker tag coilysiren-eco-mcp-app:latest ghcr.io/${{ github.repository }}/coilysiren-eco-mcp-app:${{ github.sha }}
+      - run: docker push ghcr.io/${{ github.repository }}/coilysiren-eco-mcp-app:${{ github.sha }}
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-publish
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - run: sudo tailscale up --accept-dns --accept-routes --advertise-tags=tag:ci --hostname=github-actions
+      - name: kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+      - name: kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          cat <<EOF > ~/.kube/config
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: default
+            cluster:
+              server: ${{ secrets.K8S_SERVER }}
+              certificate-authority-data: ${{ secrets.K8S_CA_DATA }}
+          contexts:
+          - name: default
+            context:
+              cluster: default
+              user: default
+          current-context: default
+          preferences: {}
+          users:
+          - name: default
+            user:
+              client-certificate-data: ${{ secrets.K8S_CLIENT_CERT_DATA }}
+              client-key-data: ${{ secrets.K8S_CLIENT_KEY_DATA }}
+          EOF
+      - run: make .deploy

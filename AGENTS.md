@@ -23,11 +23,14 @@ Commit whenever a unit of work feels sufficiently complete — after fixing a bu
 
 ## Project layout
 
-- `src/eco_mcp_app/server.py` — MCP server (stdio, low-level SDK). One tool: `get_eco_server_status`.
-- `src/eco_mcp_app/ui/eco.html` — the iframe rendered by MCP Apps hosts; hand-rolled handshake, no bundler.
+- `src/eco_mcp_app/server.py` — transport-agnostic MCP server. One tool: `get_eco_server_status` with optional `server` arg (host, host:port, or full URL — bare IPs are common for public Eco servers).
+- `src/eco_mcp_app/__main__.py` — stdio entry point for Claude Desktop.
+- `src/eco_mcp_app/http_app.py` — Starlette ASGI app wrapping the same MCP server via `StreamableHTTPSessionManager` (stateless). Routes: `/`, `/healthz`, `/mcp/`. Used by the homelab deploy.
+- `src/eco_mcp_app/ui/eco.html` — the iframe rendered by MCP Apps hosts; hand-rolled handshake, no bundler. Eco's Steam banner is inlined as a data URI (external image origins are blocked by Claude Desktop's CSP per `claude-ai-mcp#40`).
 - `scripts/install-desktop-config.py` — registers this server in Claude Desktop's config.
 - `static/harness.html` — browser-based MCP Apps host simulator for iterating on the iframe without restarting Claude Desktop. Also wired into `.claude/launch.json` as the `eco-harness` preview.
-- `tasks.py` — `inv smoke`, `inv harness`, `inv ruff`, `inv fmt`, `inv install-desktop`.
+- `tasks.py` — `inv smoke`, `inv http`, `inv harness`, `inv ruff`, `inv fmt`, `inv precommit`, `inv install-desktop`.
+- `Dockerfile` / `Makefile` / `config.yml` / `deploy/main.yml` / `.github/workflows/build-and-publish.yml` — homelab deploy rig, cloned from `coilysiren/backend`.
 - `investigation/` — chronological post-mortem of the debugging session that produced this repo. Read these before questioning a decision that looks weird.
 
 ## Dev loop
@@ -35,8 +38,10 @@ Commit whenever a unit of work feels sufficiently complete — after fixing a bu
 - `uv sync --group dev` — install runtime + dev deps.
 - `pre-commit install` (once) — ruff + mypy run on every `git commit`.
 - `inv smoke` — stdio smoke test: initialize → list tools → read resource → call tool.
+- `inv http` — run the HTTP transport locally on `:4000`. Endpoint: `POST /mcp/`.
 - `inv harness` — serve the dev harness at `http://localhost:8765/static/harness.html` for iframe work.
 - `inv ruff` / `inv fmt` — lint/format check vs apply.
+- `make build-docker` / `make deploy` — build/push the image and roll out to k3s (needs kubectl + AWS SSM access for bootstrap).
 
 ## Sibling Eco repos
 
@@ -44,12 +49,12 @@ This project depends on the user's Eco (Strange Loop Games) repo ecosystem, whic
 
 | Dir | Visibility | Purpose |
 |---|---|---|
-| `eco-agent` | public | Python/FastAPI service (Discord + OpenTelemetry + AWS SSM), deployed to eco.coilysiren.me. Shares its k3s target with the eventual HTTP deployment of this repo. |
+| `backend` | public | The canonical deploy template for k3s + GHCR + Tailscale + cert-manager. `Dockerfile` / `Makefile` / `deploy/main.yml` / `.github/workflows/build-and-publish.yml` in this repo were cloned from there. |
 | `eco-cycle-prep` | public | Per-cycle setup (worldgen, Discord announcements, mod sync). Pyinvoke-driven, same pattern as this repo's `tasks.py`. |
 | `eco-mods` | private | Third-party mods installed on the user's private Eco server + configs. C#. |
 | `eco-mods-public` | public | User's own C# mods (BunWulf family + others). |
 | `eco-configs` | private | Server config diffs. |
-| `infrastructure` | public | k3s + pyinvoke + external-secrets + Traefik. Canonical deploy pattern for the homelab; this repo will follow it when the HTTP transport lands. |
+| `infrastructure` | public | k3s + pyinvoke + external-secrets + Traefik. Low-level homelab cluster config; reference for how the cluster itself is wired. |
 
 ## Key references
 

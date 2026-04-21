@@ -62,3 +62,9 @@ def fmt(c):  # type: ignore[no-untyped-def]
 def precommit(c):  # type: ignore[no-untyped-def]
     """Run all pre-commit hooks against every file."""
     c.run("uv run pre-commit run --all-files")
+
+
+@task(help={"port": "Port for the HTTP transport (default: 4000)."})
+def http(c, port=4000):  # type: ignore[no-untyped-def]
+    """Run the Streamable-HTTP transport locally (POST /mcp/, GET /healthz)."""
+    c.run(f"uv run uvicorn eco_mcp_app.http_app:app --reload --host 0.0.0.0 --port {port}")

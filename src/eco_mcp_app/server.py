@@ -1,4 +1,4 @@
-"""MCP server + UI resource for the Eco via Sirens game server."""
+"""MCP server + UI resource for any public Eco game server."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 import os
 from importlib.resources import files
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from mcp.server.lowlevel import NotificationOptions, Server
@@ -20,7 +21,8 @@ from mcp.types import (
 )
 from pydantic import AnyUrl
 
-ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
+DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
+DEFAULT_ECO_PORT = int(os.environ.get("ECO_INFO_PORT", "3001"))
 RESOURCE_URI = "ui://eco/status.html"
 RESOURCE_MIME = "text/html;profile=mcp-app"
 
@@ -33,12 +35,35 @@ UI_META: dict[str, Any] = {
 }
 
 
-async def fetch_eco_info() -> dict[str, Any]:
+def normalize_server_url(server: str | None) -> str:
+    """Turn a user-supplied server string into a full /info URL.
+
+    Accepts any of: a full URL (`http://host:3001/info`), host-only
+    (`eco.example.com`, `192.168.1.5`), or host:port (`10.0.0.5:4001`).
+    Most public Eco servers advertise as bare IPs, so we don't require a
+    scheme — we assume http and the default Eco port when missing.
+    """
+    if not server:
+        return DEFAULT_ECO_INFO_URL
+    s = server.strip()
+    if "://" not in s:
+        s = f"http://{s}"
+    parsed = urlparse(s)
+    host = parsed.hostname or ""
+    port = parsed.port or DEFAULT_ECO_PORT
+    path = parsed.path if parsed.path and parsed.path != "/" else "/info"
+    return urlunparse((parsed.scheme or "http", f"{host}:{port}", path, "", "", ""))
+
+
+async def fetch_eco_info(server: str | None = None) -> dict[str, Any]:
     """Hit the Eco server /info endpoint. Raises on non-200."""
+    url = normalize_server_url(server)
     async with httpx.AsyncClient(timeout=5.0) as client:
-        r = await client.get(ECO_INFO_URL)
+        r = await client.get(url)
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        data["_sourceUrl"] = url
+        return data
 
 
 def redact(info: dict[str, Any]) -> dict[str, Any]:
@@ -54,6 +79,7 @@ def to_payload(info: dict[str, Any]) -> dict[str, Any]:
     return {
         "view": "eco_status",
         "fetchedAtISO": info.get("_fetchedAtISO"),
+        "sourceUrl": info.get("_sourceUrl"),
         "server": {
             "description": info.get("Description", ""),
             "detailedDescription": info.get("DetailedDescription", ""),
@@ -106,8 +132,9 @@ def _format_markdown(payload: dict[str, Any]) -> str:
     w = payload["world"]
     c = payload["cycle"]
     s = payload["server"]
+    title = s.get("description") or s.get("category") or "Eco server"
     lines = [
-        f"**Eco via Sirens** — {s.get('category', 'Server')} · cycle day {c['daysRunning']}",
+        f"**{title}** — {s.get('category', 'Server')} · cycle day {c['daysRunning']}",
         "",
         f"- Online: **{p['online']} / {p['total']}** players"
         f" (peak {p['peakActive']}, active {p['activeAndOnline']})",
@@ -119,6 +146,8 @@ def _format_markdown(payload: dict[str, Any]) -> str:
     ]
     if s.get("discord"):
         lines.append(f"- [Join Discord]({s['discord']})")
+    if payload.get("sourceUrl"):
+        lines.append(f"- Source: `{payload['sourceUrl']}`")
     return "\n".join(lines)
 
 
@@ -133,8 +162,12 @@ def _load_ui_html() -> str:
             return f.read()
 
 
-async def serve() -> None:
-    """Entry point used by __main__.main()."""
+def build_server() -> Server:
+    """Construct the MCP Server with all handlers registered.
+
+    Separated from `serve()` so it can be mounted in both the stdio transport
+    (Claude Desktop) and the Streamable-HTTP transport (homelab FastAPI deploy).
+    """
     server: Server = Server("eco-mcp-app")
 
     @server.list_tools()
@@ -142,17 +175,29 @@ async def serve() -> None:
         return [
             Tool(
                 name="get_eco_server_status",
-                title="Eco via Sirens — server status",
+                title="Eco — server status",
                 description=(
-                    "Show the current state of the 'Eco via Sirens' game server inline: "
+                    "Show the current state of any public Eco game server inline: "
                     "online players, meteor countdown, world stats, economy, version. "
-                    "Renders as a visual widget in Claude Desktop chat UI via the MCP Apps "
-                    "spec; falls back to a plain-text summary in hosts that don't render "
-                    "the iframe."
+                    "Defaults to the server configured via ECO_INFO_URL; pass `server` "
+                    "(host, host:port, or full URL — IPs are fine, most public Eco "
+                    "servers advertise as bare IPs) to target a different one. "
+                    "Renders as a visual widget in Claude Desktop via the MCP Apps "
+                    "spec; falls back to a plain-text summary in other hosts."
                 ),
                 inputSchema={
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": (
+                                "Eco server to query. Accepts a bare host or IP "
+                                "(`eco.example.com`, `192.168.1.5`), host:port "
+                                "(`10.0.0.5:4001`), or a full `/info` URL. Omit to use "
+                                "the server configured via ECO_INFO_URL."
+                            ),
+                        },
+                    },
                     "additionalProperties": False,
                 },
                 **{"_meta": UI_META},
@@ -174,8 +219,6 @@ async def serve() -> None:
         if str(uri) != RESOURCE_URI:
             raise ValueError(f"Unknown resource: {uri}")
         html = _load_ui_html()
-        # The SDK wraps each item into TextResourceContents or BlobResourceContents
-        # based on whether .content is str or bytes.
         return [ReadResourceContents(content=html, mime_type=RESOURCE_MIME)]
 
     @server.call_tool()
@@ -184,8 +227,9 @@ async def serve() -> None:
             raise ValueError(f"Unknown tool: {name}")
         from datetime import UTC, datetime
 
+        server_arg = arguments.get("server") if arguments else None
         try:
-            raw = await fetch_eco_info()
+            raw = await fetch_eco_info(server_arg)
         except httpx.HTTPError as e:
             err_payload = {"view": "error", "message": f"Could not reach Eco server: {e}"}
             return CallToolResult(
@@ -208,7 +252,11 @@ async def serve() -> None:
             **{"_meta": UI_META},
         )
 
-    options = InitializationOptions(
+    return server
+
+
+def build_initialization_options(server: Server) -> InitializationOptions:
+    return InitializationOptions(
         server_name="eco-mcp-app",
         server_version="0.1.0",
         capabilities=server.get_capabilities(
@@ -217,5 +265,10 @@ async def serve() -> None:
         ),
     )
 
+
+async def serve() -> None:
+    """Stdio transport — the Claude Desktop entry point used by __main__.main()."""
+    server = build_server()
+    options = build_initialization_options(server)
     async with stdio_server() as (read, write):
         await server.run(read, write, options)

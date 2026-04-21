@@ -1,9 +1,11 @@
 # eco-mcp-app
 
-An inline Claude Desktop widget for the **Eco via Sirens** game server [1]. Ask Claude
-"what's the Eco server doing?" and you get a live card back: meteor countdown,
-online/total players, plants and animals, world size, laws, economy, Discord CTA.
-No screenshots, no tab-switching.
+An inline Claude Desktop widget for any public **Eco** game server [4] — point it
+at the "Eco via Sirens" [1] server (the default) or any other Eco server by IP
+or hostname. Ask Claude "what's the Eco server doing?" and you get a live card
+back: meteor countdown, online/total players, world size, laws, economy,
+Discord CTA, a link to Eco on Steam. No screenshots, no tab-switching. Cards
+you don't have data for just aren't rendered.
 
 It's also a tech demo — a minimal, hand-rolled MCP Apps implementation [2]
 without a bundler or React, so the whole iframe is one 300-line HTML file.
@@ -67,12 +69,12 @@ it — and writing it out makes the spec readable.
 ## See also
 
 This repo sits next to a small Eco ecosystem: `eco-cycle-prep` [6] runs
-per-cycle setup (worldgen, Discord announcements, mod sync); `eco-agent` [7]
-was an earlier FastAPI companion service for the same server; `eco-mods-public` [8]
-is where the gameplay mods live. Server infrastructure is defined in
-`infrastructure` [9] (k3s + pyinvoke + external-secrets + Traefik). Canonical
-Eco references: ModKit [10], modding docs [11], Eco wiki modding page [12],
-the Discord bridge plugin [13], and mod catalog [14].
+per-cycle setup (worldgen, Discord announcements, mod sync); `eco-mods-public` [8]
+is where the gameplay mods live. The deploy pattern (Dockerfile, Makefile,
+k8s manifest, GH Actions) is cloned from `coilysiren/backend` [7], which is
+the canonical template for the homelab k3s + GHCR + Tailscale + cert-manager
+stack. Canonical Eco references: ModKit [10], modding docs [11], Eco wiki
+modding page [12], the Discord bridge plugin [13], and mod catalog [14].
 
 ## Install (local, Claude Desktop)
 
@@ -92,18 +94,31 @@ You should get the meteor card inline.
 
 ## Deploy (homelab)
 
-The long-term target is `eco-mcp.coilysiren.me` on the same k3s cluster that
-already hosts `eco-agent`. Pattern is unchanged from `infrastructure` [9]:
+Target: `eco-mcp.coilysiren.me` on the k3s cluster, following the template in
+`coilysiren/backend` [7] (same Dockerfile/Makefile/deploy shape). The server
+speaks MCP over Streamable-HTTP at `/mcp/` via `src/eco_mcp_app/http_app.py`
+(Starlette + `StreamableHTTPSessionManager` in stateless mode). Health probe
+at `/healthz`.
 
-- Build a Docker image (`Dockerfile` TODO)
-- Manifests in `deploy/` (Deployment, Service, Ingress, TLS via cert-manager,
-  ClusterIssuer already in the infra repo)
-- No secrets needed — the `/info` endpoint is public; server runs without env vars
+Pipeline: `.github/workflows/build-and-publish.yml` builds the image and
+pushes to `ghcr.io/coilysiren/eco-mcp-app/...` on every push to `main`, then
+a second job uses Tailscale to reach the cluster and applies `deploy/main.yml`
+via `make .deploy`. All cluster + Tailscale creds are GH Actions secrets; no
+plaintext secrets in the repo.
 
-MCP-over-HTTP brings its own spec pitfalls (session-id splits and resource
-registration scoping, tracked upstream in ext-apps#481), so the initial
-deploy will likely be the same stdio binary wrapped as a Streamable-HTTP
-server via the mcp SDK's HTTP transport — that's a later cycle's problem.
+One-time bootstrap (run from a machine with kubectl access + AWS SSM creds —
+pulls the GHCR pull-secret PAT from `aws ssm /github/pat`, no secrets read into
+shell):
+
+```sh
+make deploy-namespace
+make deploy-secrets-docker-repo
+```
+
+After that, every `git push` to main deploys. No secrets needed at runtime —
+the `/info` endpoint of the upstream Eco server is public, and the tool accepts
+the target server as an argument so a single deployment can query any public
+Eco server.
 
 ## Smoke test
 
@@ -183,7 +198,7 @@ MIT.
 4. <https://play.eco/>
 5. <https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx>
 6. <https://github.com/coilysiren/eco-cycle-prep>
-7. <https://github.com/coilysiren/eco-agent>
+7. <https://github.com/coilysiren/backend>
 8. <https://github.com/coilysiren/eco-mods-public>
 9. <https://github.com/coilysiren/infrastructure>
 10. <https://github.com/StrangeLoopGames/EcoModKit>
@@ -204,7 +219,7 @@ MIT.
 [4]: https://play.eco/
 [5]: https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx
 [6]: https://github.com/coilysiren/eco-cycle-prep
-[7]: https://github.com/coilysiren/eco-agent
+[7]: https://github.com/coilysiren/backend
 [8]: https://github.com/coilysiren/eco-mods-public
 [9]: https://github.com/coilysiren/infrastructure
 [10]: https://github.com/StrangeLoopGames/EcoModKit

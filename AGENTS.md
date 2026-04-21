@@ -22,7 +22,7 @@ You have full read access to files within `/Users/kai/projects/coilysiren`.
 - Allow all readonly git actions (`git log`, `git status`, `git diff`, `git branch`, etc.) without asking.
 - Allow `cd` into any `/Users/kai/projects/coilysiren` folder without asking.
 - Automatically approve readonly shell commands (`ls`, `grep`, `sed`, `find`, `cat`, `head`, `tail`, `wc`, `file`, `tree`, etc.) without asking.
-- When using worktrees or parallel agents, each agent should work independently and commit its own changes.
+- When using worktrees or parallel agents, each agent should work independently, commit its own changes, and merge the worktree branch back into `main` automatically without asking.
 - Do not open pull requests unless explicitly asked.
 
 ## Git workflow
@@ -30,6 +30,8 @@ You have full read access to files within `/Users/kai/projects/coilysiren`.
 Commit directly to `main` without asking for confirmation, including `git add`. Do not open pull requests unless explicitly asked.
 
 Commit whenever a unit of work feels sufficiently complete — after fixing a bug, adding a feature, passing tests, or reaching any other natural stopping point. Don't wait for the user to ask.
+
+After each commit to `main`, run the test suite (or confirm it was just run). If tests pass, `git push` immediately without asking. If tests fail, fix them before pushing.
 
 ## Project layout
 

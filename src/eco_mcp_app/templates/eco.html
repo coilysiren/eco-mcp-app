@@ -24,6 +24,7 @@
 </head>
 <body>
   <div class="leaves"></div>
+  {% include "partials/site_header.html" %}
   <div class="shell" id="root">
     {% if prerendered %}{{ prerendered }}{% else %}{% include "partials/empty.html" %}{% endif %}
   </div>

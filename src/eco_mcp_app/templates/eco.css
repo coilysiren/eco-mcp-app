@@ -46,6 +46,37 @@
     padding: 0 28px 28px;
   }
 
+  /* ---- site header ---- */
+  /* Shape mirrors eco-spec-tracker's base.html: full-width dark bar,
+     left-aligned project name, right-aligned filesystem-style nav in mono. */
+  .site-header {
+    position: relative; z-index: 3;
+    background: rgba(20, 26, 16, 0.85);
+    border-bottom: 1px solid var(--panel-border);
+    backdrop-filter: blur(6px);
+    padding: 12px 28px;
+  }
+  .site-header-inner {
+    max-width: 1080px; margin: 0 auto;
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: 8px 24px;
+  }
+  .site-title {
+    margin: 0;
+    font-size: 15px; font-weight: 600; letter-spacing: 0.01em;
+    color: var(--fg); text-decoration: none;
+  }
+  .site-title:hover { color: var(--leaf-bright); }
+  .site-nav {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  .site-nav a {
+    color: var(--leaf-bright); text-decoration: none;
+  }
+  .site-nav a:hover { text-decoration: underline; }
+
   /* ---- banner ---- */
   .banner-wrap {
     margin: 20px 0 18px; border-radius: 14px; overflow: hidden;

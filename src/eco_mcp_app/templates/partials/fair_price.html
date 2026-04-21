@@ -1,0 +1,40 @@
+{# Fair-price advisor card. Rendered as the tool result HTML fragment.
+   Designed for Day 3 of Cycle 13: must handle no-data + no-api-key cleanly. #}
+<section class="fair-price-card">
+  <header>
+    <h2 style="margin:0 0 .25rem 0">Fair Price — {{ display_name or item or "?" }}</h2>
+    {% if series_id %}
+      <div class="hint" style="font-size:.85em;opacity:.75">
+        FRED series <code>{{ series_id }}</code>
+        {% if frequency %} · {{ changes_label or frequency }}{% endif %}
+        {% if cached %} · cache hit{% endif %}
+      </div>
+    {% endif %}
+  </header>
+
+  {% if error %}
+    <div class="empty" style="margin-top:.75rem">
+      <strong style="color:var(--warn)">No advisory available</strong>
+      <div class="hint">{{ narrative }}</div>
+    </div>
+  {% else %}
+    <p style="margin:.75rem 0">{{ narrative }}</p>
+    {% if latest_value is not none %}
+      <dl class="kv" style="display:grid;grid-template-columns:auto 1fr;gap:.25rem .75rem;margin:0">
+        <dt>Latest</dt>
+        <dd>{{ "%.2f"|format(latest_value) }} {{ display_unit }} ({{ latest_date }})</dd>
+        {% for k, v in changes.items() %}
+          <dt>{{ k }}</dt>
+          <dd>
+            {% if v is none %}n/a
+            {% else %}{% if v >= 0 %}+{% endif %}{{ "%.2f"|format(v) }}%{% endif %}
+          </dd>
+        {% endfor %}
+      </dl>
+    {% endif %}
+  {% endif %}
+
+  <footer style="margin-top:.75rem;font-size:.8em;opacity:.6">
+    Advisory only — no in-game enforcement. Data: FRED (St. Louis Fed).
+  </footer>
+</section>

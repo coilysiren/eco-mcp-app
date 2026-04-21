@@ -33,6 +33,7 @@ jobs:
           (^|/)\.mypy_cache/
           (^|/)\.pytest_cache/
           (^|/)\.ruff_cache/
+          (^|/)data/.*\.json$
           EOF
           docker run --rm \
             -v "${{ github.workspace }}:/pwd:ro" \

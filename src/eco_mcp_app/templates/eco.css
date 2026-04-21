@@ -353,77 +353,203 @@
   .eco-map__empty { padding: 14px; text-align: center; color: var(--fg-muted); }
 
   /* Species profile card (get_eco_species tool). */
-  .species-card { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
-  .species-header { display: flex; gap: 14px; align-items: flex-start; }
-  .species-photo { width: 120px; height: 120px; object-fit: cover;
-    border-radius: 8px; border: 1px solid rgba(165, 209, 74, 0.25);
-    background: rgba(0, 0, 0, 0.25); flex-shrink: 0; }
-  .species-photo--missing { display: flex; align-items: center; justify-content: center;
-    color: var(--fg-muted); font-size: 12px; }
+  .species {
+    position: relative; z-index: 2;
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 14px; padding: 20px 24px; margin-top: 20px;
+    backdrop-filter: blur(6px);
+    display: flex; flex-direction: column; gap: 14px;
+    color: var(--fg);
+  }
+  .species-head { display: flex; gap: 18px; align-items: flex-start; }
+  .species-photo {
+    width: 120px; height: 120px; object-fit: cover;
+    border-radius: 10px; border: 1px solid rgba(165, 209, 74, 0.25);
+    background: rgba(0, 0, 0, 0.25); flex-shrink: 0;
+  }
+  .species-photo--missing {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--fg-muted); font-size: 12px;
+  }
   .species-title { flex: 1; min-width: 0; }
-  .species-extract { margin: 0; color: var(--fg); font-size: 13px; line-height: 1.45; }
+  .species-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--leaf-bright); font-weight: 700;
+  }
+  .species-name {
+    margin: 4px 0 4px;
+    font-size: 26px; font-weight: 700; line-height: 1.1;
+    color: var(--fg); letter-spacing: -0.01em;
+  }
+  .species-sub {
+    font-size: 12px; color: var(--fg-muted);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  }
+  .species-sub code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px; color: var(--fg-faint);
+    background: rgba(0, 0, 0, 0.25); padding: 1px 6px; border-radius: 4px;
+  }
+  .species-sep { color: var(--fg-faint); }
+  .species-conservation { color: var(--warn); font-weight: 600; }
+  .species-extract {
+    margin: 0; color: var(--fg); font-size: 13px; line-height: 1.55;
+  }
   .species-taxonomy { font-size: 12px; color: var(--fg-muted); }
   .species-tax-step { color: var(--leaf-bright); }
   .species-tax-sep { color: rgba(165, 209, 74, 0.4); }
-  .species-conservation { font-size: 13px; color: var(--warn, #e0b75c); }
-  .species-pop { margin-top: 4px; }
-  .species-spark { display: block; margin-top: 6px;
-    border: 1px solid rgba(165, 209, 74, 0.18); border-radius: 6px;
-    background: rgba(0, 0, 0, 0.2); }
-  .species-links { font-size: 12px; }
-  .species-links a { color: var(--leaf-bright); }
 
-  /* ---- ecopedia card (explain_eco_item) ---- */
-  .ecopedia {
-    position: relative; z-index: 2;
-    background: var(--panel);
+  /* Population stat block — mirrors the .card style used elsewhere. */
+  .species-stat {
+    background: rgba(20, 26, 16, 0.55);
     border: 1px solid var(--panel-border);
     border-radius: 10px;
-    padding: 18px 22px;
-    margin-top: 20px;
-    color: var(--fg);
+    padding: 14px 16px;
   }
-  .ecopedia-header {
-    display: flex; gap: 18px; align-items: flex-start;
-    justify-content: space-between;
+  .species-stat-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--fg-faint);
   }
-  .ecopedia-title .label {
-    font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
-    color: var(--leaf-bright); font-weight: 700;
+  .species-stat-val {
+    font-size: 28px; font-weight: 700; color: var(--fg);
+    margin-top: 4px; line-height: 1.1;
+    font-variant-numeric: tabular-nums;
   }
-  .ecopedia-name { margin: 4px 0 2px; font-size: 22px; font-weight: 700; }
-  .ecopedia-category {
-    font-size: 12px; color: var(--fg-muted);
-    text-transform: capitalize;
+  .species-stat-val--empty { color: var(--fg-faint); }
+  .species-stat-sub {
+    font-size: 12px; color: var(--fg-muted); margin-top: 2px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   }
-  .ecopedia-image {
-    max-width: 160px; max-height: 160px; border-radius: 8px;
-    object-fit: cover; border: 1px solid var(--panel-border);
-    background: rgba(0, 0, 0, 0.25);
+  .species-stat-sub--warn { color: var(--warn); }
+  .species-spark {
+    display: block; margin-top: 10px;
+    border: 1px solid rgba(165, 209, 74, 0.18); border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
   }
-  .ecopedia-description { margin: 14px 0 10px; color: var(--fg); }
-  .ecopedia-description.hint { color: var(--fg-muted); font-style: italic; }
-  .ecopedia-facts {
-    width: 100%; border-collapse: collapse; margin-top: 8px;
-    font-size: 13px;
-  }
-  .ecopedia-facts th, .ecopedia-facts td {
-    padding: 6px 10px; text-align: left;
-    border-bottom: 1px dashed rgba(165, 209, 74, 0.15);
-  }
-  .ecopedia-facts th {
-    color: var(--leaf-bright); font-weight: 600;
-    width: 40%;
-  }
-  .ecopedia-facts td { color: var(--fg); }
-  .ecopedia-footer {
-    margin-top: 12px; font-size: 12px; color: var(--fg-muted);
-  }
-  .ecopedia-footer a {
+
+  .species-links { font-size: 12px; }
+  .species-links a {
     color: var(--leaf-bright); text-decoration: none;
     border-bottom: 1px dotted rgba(165, 209, 74, 0.55);
   }
-  .ecopedia-footer a:hover { color: #c7e87a; }
+  .species-links a:hover { color: #c7e87a; }
+
+  /* ---- ecopedia card (explain_eco_item) — Wikipedia-style article ---- */
+  .ecopedia {
+    position: relative; z-index: 2;
+    background: #fff;
+    color: #202122;
+    border: 1px solid #a2a9b1;
+    border-radius: 2px;
+    padding: 16px 22px 20px;
+    margin-top: 20px;
+    font-family: sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .ecopedia::after { content: ""; display: block; clear: both; }
+  .ecopedia a { color: #3366cc; text-decoration: none; }
+  .ecopedia a:hover { text-decoration: underline; }
+
+  .ecopedia-header { display: block; }
+  .ecopedia-name {
+    margin: 0 0 4px;
+    font-family: "Linux Libertine", Georgia, "Times New Roman", serif;
+    font-weight: normal;
+    font-size: 28px;
+    line-height: 1.25;
+    color: #000;
+    border-bottom: 1px solid #a2a9b1;
+    padding-bottom: 6px;
+  }
+  .ecopedia-subtitle {
+    font-size: 12px;
+    color: #54595d;
+    font-style: italic;
+    margin: 2px 0 14px;
+  }
+  .ecopedia-category { text-transform: capitalize; font-style: normal; }
+
+  .ecopedia-infobox {
+    float: right;
+    width: 260px;
+    margin: 0 0 14px 18px;
+    background: #f8f9fa;
+    border: 1px solid #a2a9b1;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #202122;
+  }
+  .ecopedia-infobox-title {
+    background: #eaecf0;
+    color: #000;
+    font-weight: bold;
+    text-align: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid #a2a9b1;
+    font-family: "Linux Libertine", Georgia, serif;
+    font-size: 14px;
+  }
+  .ecopedia-infobox-image-wrap {
+    padding: 8px; text-align: center; background: #fff;
+    border-bottom: 1px solid #eaecf0;
+  }
+  .ecopedia-infobox-image {
+    display: inline-block;
+    max-width: 100%; max-height: 240px;
+    object-fit: contain;
+  }
+  .ecopedia-infobox-facts {
+    width: 100%; border-collapse: collapse; margin: 0;
+  }
+  .ecopedia-infobox-facts tr + tr th,
+  .ecopedia-infobox-facts tr + tr td {
+    border-top: 1px solid #eaecf0;
+  }
+  .ecopedia-infobox-facts th,
+  .ecopedia-infobox-facts td {
+    padding: 5px 8px;
+    text-align: left; vertical-align: top;
+  }
+  .ecopedia-infobox-facts th {
+    width: 42%;
+    font-weight: bold;
+    background: #f8f9fa;
+  }
+
+  .ecopedia-description {
+    margin: 10px 0;
+    color: #202122;
+    font-size: 14px;
+  }
+  .ecopedia-description b { font-weight: bold; }
+  .ecopedia-description.hint {
+    color: #54595d;
+    font-style: italic;
+  }
+
+  .ecopedia-empty {
+    padding: 40px 20px; text-align: center; color: #54595d;
+    background: #f8f9fa; border: 1px solid #eaecf0; border-radius: 2px;
+  }
+  .ecopedia-empty strong { color: #d33; }
+  .ecopedia-empty .hint { margin-top: 6px; font-size: 12px; color: #72777d; }
+  .ecopedia-empty code {
+    background: #eaecf0; padding: 1px 4px; border-radius: 2px;
+    font-size: 12px;
+  }
+
+  .ecopedia-footer {
+    clear: both;
+    margin-top: 18px;
+    padding-top: 10px;
+    border-top: 1px solid #a2a9b1;
+    font-size: 12px;
+    color: #54595d;
+  }
+  .ecopedia-footer a { color: #3366cc; }
+  .ecopedia-footer a:hover { text-decoration: underline; }
+  .ecopedia-footer .hint { color: #72777d; }
 
   /* ---- crafting activity atlas ---- */
   .crafting-atlas { margin-top: 18px; }

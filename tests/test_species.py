@@ -20,6 +20,7 @@ from eco_mcp_app.species import (
     ECO_BASE_URL,
     INAT_BASE_URL,
     PopulationSample,
+    _fetch_inat_taxon,
     build_species_payload,
     clean_species_name,
     fetch_species_population,
@@ -210,6 +211,46 @@ async def test_inat_response_is_cached() -> None:
     assert inat_route.call_count == 1
 
 
+# --- iNat re-ranking ------------------------------------------------------
+
+
+@respx.mock
+async def test_fetch_inat_taxon_bison_prefers_genus_over_grass() -> None:
+    """`q=Bison` on iNat returns a grass first; we must pick the Bison genus."""
+    payload = {
+        "results": [
+            {
+                "id": 999,
+                "name": "Anthoxanthum odoratum",
+                "preferred_common_name": "Sweet Vernal Grass",
+                "matched_term": "bison grass",
+                "rank": "species",
+                "ancestors": [
+                    {"rank": "kingdom", "name": "Plantae"},
+                    {"rank": "family", "name": "Poaceae"},
+                ],
+            },
+            {
+                "id": 42158,
+                "name": "Bison",
+                "preferred_common_name": "Bison",
+                "matched_term": "Bison",
+                "rank": "genus",
+                "ancestors": [
+                    {"rank": "kingdom", "name": "Animalia"},
+                    {"rank": "family", "name": "Bovidae"},
+                ],
+            },
+        ]
+    }
+    respx.get(f"{INAT_BASE_URL}/taxa").mock(return_value=httpx.Response(200, json=payload))
+    taxon = await _fetch_inat_taxon("Bison")
+    assert taxon is not None
+    assert taxon["name"] == "Bison"
+    assert taxon["rank"] == "genus"
+    assert any(a.get("name") == "Bovidae" for a in taxon["ancestors"])
+
+
 # --- MCP integration ------------------------------------------------------
 
 
@@ -238,5 +279,5 @@ async def test_get_eco_species_tool_returns_card_blocks() -> None:
     assert payload["speciesId"] == "BisonSpecies"
     assert payload["populationLatest"] == 24
     assert fragment.startswith("HTMX:")
-    assert "species-card" in fragment
+    assert 'class="species"' in fragment
     assert "<svg" in fragment  # sparkline rendered

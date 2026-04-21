@@ -11,7 +11,7 @@ from .server import serve
 
 def main() -> None:
     # Optional RPC tee for debugging which host is talking and what it advertises.
-    # Mirrors kapwing-mcp-app's KAPWING_MCP_RPC_LOG pattern.
+    # Set ECO_MCP_APP_RPC_LOG to a file path; outbound JSON-RPC is appended there.
     log_path = os.environ.get("ECO_MCP_APP_RPC_LOG")
     if log_path:
         # Only tee outbound; stdin handling by the mcp SDK uses its own reader.

@@ -9,6 +9,7 @@ authors = [{ name = "Kai Siren" }]
 dependencies = [
   "mcp>=1.14.0",
   "httpx>=0.28.0",
+  "invoke>=3.0.3",
 ]
 
 [project.scripts]

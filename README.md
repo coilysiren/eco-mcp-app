@@ -175,7 +175,31 @@ The harness is also usable from Claude Code's Preview panel via the
 
 MIT.
 
----
+## References
+
+Body uses `[N]` footnote markers. The reference definitions at the very bottom
+make the in-body `[N]` tokens clickable; the visible list above them repeats
+each URL in bare form for plain-text viewers. (CommonMark reference
+definitions have to start at the beginning of a line, so they can't be
+combined onto one line with a visible URL — hence the two blocks.)
+
+[1] https://www.coilysiren.me/
+[2] https://modelcontextprotocol.io/docs/concepts/apps
+[3] https://github.com/modelcontextprotocol/ext-apps
+[4] https://play.eco/
+[5] https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx
+[6] https://github.com/coilysiren/eco-cycle-prep
+[7] https://github.com/coilysiren/eco-agent
+[8] https://github.com/coilysiren/eco-mods-public
+[9] https://github.com/coilysiren/infrastructure
+[10] https://github.com/StrangeLoopGames/EcoModKit
+[11] https://docs.play.eco/
+[12] https://wiki.play.eco/en/Modding
+[13] https://github.com/Eco-DiscordLink/EcoDiscordPlugin
+[14] https://mod.io/g/eco
+[15] https://github.com/anthropics/claude-ai-mcp/issues/71
+[16] https://github.com/anthropics/claude-ai-mcp/issues/61#issuecomment-4283640203
+[17] https://github.com/anthropics/claude-ai-mcp/issues/40
 
 [1]: https://www.coilysiren.me/
 [2]: https://modelcontextprotocol.io/docs/concepts/apps

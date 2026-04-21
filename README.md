@@ -20,6 +20,10 @@ than the default TypeScript/ext-apps [4] stack.
 ![](https://img.shields.io/badge/mcp-1.14+-ff6b35)
 ![](https://img.shields.io/badge/MCP_Apps-spec_2026--01--26-7cb342)
 
+[![Live card screenshot](docs/preview.png)](https://eco-mcp.coilysiren.me/preview)
+
+<sub>Live at [eco-mcp.coilysiren.me/preview](https://eco-mcp.coilysiren.me/preview) — the same HTML Claude Desktop renders inline via the MCP Apps spec.</sub>
+
 ## What it renders
 
 ```

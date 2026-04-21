@@ -1,0 +1,146 @@
+{# Biodiversity drift + ecoregion match card. Rendered as a standalone
+   fragment (no banner / hero wrapper) so it swaps cleanly into #root.
+   Donut chart is inline SVG — a conic-gradient stroke on a single circle
+   wouldn't let us label per-slice, and Chart.js would need to be bundled
+   (CSP forbids CDN). 12 short arcs in SVG are fine at this size. #}
+
+<div class="ecoregion">
+  <h2 class="ecoregion-title">Biodiversity &amp; ecoregion match</h2>
+
+  {% if biomes_have_data %}
+  <section class="ecoregion-section">
+    <div class="ecoregion-donut-row">
+      <svg class="ecoregion-donut" viewBox="-50 -50 100 100" width="180" height="180" role="img" aria-label="Biome composition donut chart">
+        {# Each slice is rendered as a stroked arc. unclassifiedPercent fills
+           the remainder to 100% so the donut closes. #}
+        {# Background ring (unclassified / "unknown" territory) #}
+        <circle cx="0" cy="0" r="40" fill="none"
+                stroke="#3a3a3a" stroke-opacity="0.35" stroke-width="14"></circle>
+        {% for slice in donut_slices %}
+          <circle cx="0" cy="0" r="40" fill="none"
+                  stroke="{{ slice.color }}" stroke-width="14"
+                  stroke-dasharray="{{ '%.3f' % slice.length }} {{ '%.3f' % slice.gap }}"
+                  stroke-dashoffset="{{ '%.3f' % slice.offset }}"
+                  transform="rotate(-90)"></circle>
+        {% endfor %}
+        <text x="0" y="-3" text-anchor="middle" fill="var(--fg)"
+              font-size="8" font-weight="700">{{ '%.0f' % raw_sum_percent }}%</text>
+        <text x="0" y="7" text-anchor="middle" fill="var(--fg-muted)"
+              font-size="5">classified</text>
+      </svg>
+
+      <ul class="ecoregion-legend">
+        {% for b in biomes %}
+          {% if b.percent > 0 %}
+          <li>
+            <span class="swatch" style="background:{{ b.color }}"></span>
+            <span class="legend-label">{{ b.display }}</span>
+            <span class="legend-pct">{{ '%.0f' % b.percent }}%</span>
+          </li>
+          {% endif %}
+        {% endfor %}
+        {% if unclassified_percent > 0 %}
+          <li class="legend-unclassified">
+            <span class="swatch" style="background:#555;opacity:0.5"></span>
+            <span class="legend-label">Unclassified / mixed</span>
+            <span class="legend-pct">{{ '%.0f' % unclassified_percent }}%</span>
+          </li>
+        {% endif %}
+      </ul>
+    </div>
+    <div class="hint ecoregion-hint">
+      Eco biome layers don't tile the world — mountains, shoreline, and
+      transitional zones are unclassified, so the slices only sum to
+      {{ '%.0f' % raw_sum_percent }}%.
+    </div>
+  </section>
+  {% else %}
+  <section class="ecoregion-section">
+    <div class="empty">
+      <strong>No biome data</strong>
+      <div class="hint">The worldlayers endpoint returned no Biome category.</div>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="ecoregion-section">
+    <h3 class="ecoregion-subtitle">Closest real-world ecoregions</h3>
+    {% if ecoregion_matches %}
+    <ol class="ecoregion-matches">
+      {% for m in ecoregion_matches %}
+      <li>
+        <div class="match-head">
+          <span class="match-name">{{ m.name }}</span>
+          <span class="match-sim">{{ '%.2f' % m.similarity }}</span>
+        </div>
+        <div class="match-desc">{{ m.description }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <div class="empty">
+      <strong>No ecoregion fixture loaded</strong>
+      <div class="hint">data/ecoregions.json is missing or empty.</div>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="ecoregion-section">
+    <h3 class="ecoregion-subtitle">Biodiversity drift</h3>
+    {% if not admin_available %}
+    <div class="empty">
+      <strong>Admin endpoints unavailable</strong>
+      <div class="hint">
+        Drift needs the exporter routes — configure
+        <code>/eco-mcp-app/api-admin-token</code> (SSM, us-east-1) and retry.
+      </div>
+    </div>
+    {% elif species_with_drift == 0 %}
+    <div class="empty">
+      <strong>Drift minimal so far</strong>
+      <div class="hint">
+        Tracked {{ species_seen }} species; no net change yet this cycle.
+      </div>
+    </div>
+    {% else %}
+    <div class="ecoregion-drift">
+      <div class="drift-col drift-boom">
+        <div class="drift-label">Boom</div>
+        {% if drift_boom %}
+          <ul>
+            {% for d in drift_boom %}
+            <li>
+              <span class="drift-name">{{ d.name }}</span>
+              <span class="drift-delta">+{{ '%.0f' % (d.deltaRel * 100) }}%</span>
+              <span class="drift-counts">{{ '%.0f' % d.first }} → {{ '%.0f' % d.latest }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="hint">No species trending up.</div>
+        {% endif %}
+      </div>
+      <div class="drift-col drift-bust">
+        <div class="drift-label">Bust</div>
+        {% if drift_bust %}
+          <ul>
+            {% for d in drift_bust %}
+            <li>
+              <span class="drift-name">{{ d.name }}</span>
+              <span class="drift-delta">{{ '%.0f' % (d.deltaRel * 100) }}%</span>
+              <span class="drift-counts">{{ '%.0f' % d.first }} → {{ '%.0f' % d.latest }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="hint">No species trending down.</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  {% if source_url %}
+  <div class="ecoregion-source hint">Source: <code>{{ source_url }}</code></div>
+  {% endif %}
+</div>

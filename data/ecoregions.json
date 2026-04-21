@@ -1,0 +1,221 @@
+{
+  "_comment": "Stylized summary of WWF Terrestrial Ecoregions of the World, keyed to Eco's 12 biome layers. Each biome_vector is a proportion (0..1) reflecting that region's approximate biome mix. Source: WWF 'Terrestrial Ecoregions of the World' (Olson et al. 2001) — proportions are hand-estimated from the Olson biome map, not API-extracted. Committed once so the MCP tool has no runtime CDN dependency (claude-ai-mcp#40 CSP).",
+  "regions": [
+    {
+      "name": "Boreal Shield (Canadian taiga)",
+      "description": "Conifer-dominated taiga with countless glacial lakes and peat-bog wetlands. Long frozen winters, short cool summers.",
+      "biome_vector": {
+        "TaigaBiome": 0.55,
+        "ColdForestBiome": 0.20,
+        "WetlandBiome": 0.10,
+        "TundraBiome": 0.05,
+        "GrasslandBiome": 0.05,
+        "OceanBiome": 0.00,
+        "DeepOceanBiome": 0.00,
+        "ForestBiome": 0.05,
+        "WarmForestBiome": 0.00,
+        "RainforestBiome": 0.00,
+        "DesertBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Pacific Northwest temperate rainforest",
+      "description": "Moss-draped coastal rainforest on a mountainous fjord coast. Huge conifers, salmon rivers, abundant rainfall.",
+      "biome_vector": {
+        "RainforestBiome": 0.35,
+        "ColdForestBiome": 0.25,
+        "ForestBiome": 0.15,
+        "WetlandBiome": 0.05,
+        "OceanBiome": 0.15,
+        "DeepOceanBiome": 0.05,
+        "TaigaBiome": 0.00,
+        "TundraBiome": 0.00,
+        "WarmForestBiome": 0.00,
+        "GrasslandBiome": 0.00,
+        "DesertBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Mediterranean basin",
+      "description": "Hot dry summers, mild wet winters. Scrubby evergreen oak and pine forest transitioning into xeric shrubland and farmland.",
+      "biome_vector": {
+        "WarmForestBiome": 0.30,
+        "ForestBiome": 0.15,
+        "GrasslandBiome": 0.15,
+        "DesertBiome": 0.10,
+        "OceanBiome": 0.25,
+        "DeepOceanBiome": 0.05,
+        "TaigaBiome": 0.00,
+        "ColdForestBiome": 0.00,
+        "WetlandBiome": 0.00,
+        "TundraBiome": 0.00,
+        "RainforestBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Amazon rainforest basin",
+      "description": "Closed-canopy equatorial rainforest threaded with blackwater rivers and seasonal floodplains. Highest terrestrial biodiversity on Earth.",
+      "biome_vector": {
+        "RainforestBiome": 0.75,
+        "WetlandBiome": 0.15,
+        "WarmForestBiome": 0.05,
+        "GrasslandBiome": 0.05,
+        "ForestBiome": 0.00,
+        "ColdForestBiome": 0.00,
+        "TaigaBiome": 0.00,
+        "TundraBiome": 0.00,
+        "OceanBiome": 0.00,
+        "DeepOceanBiome": 0.00,
+        "DesertBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Sahara desert belt",
+      "description": "The planet's largest hot desert. Bare rock, sand seas, and sparse xerophytic scrub, fringed by a Sahel of dry grassland.",
+      "biome_vector": {
+        "DesertBiome": 0.80,
+        "GrasslandBiome": 0.15,
+        "WarmForestBiome": 0.05,
+        "OceanBiome": 0.00,
+        "DeepOceanBiome": 0.00,
+        "ForestBiome": 0.00,
+        "ColdForestBiome": 0.00,
+        "RainforestBiome": 0.00,
+        "TaigaBiome": 0.00,
+        "TundraBiome": 0.00,
+        "WetlandBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Great Plains temperate grassland",
+      "description": "Continental mid-latitude grassland — tallgrass prairie in the east grading to shortgrass steppe in the rain-shadowed west.",
+      "biome_vector": {
+        "GrasslandBiome": 0.70,
+        "ForestBiome": 0.10,
+        "WarmForestBiome": 0.05,
+        "DesertBiome": 0.10,
+        "WetlandBiome": 0.05,
+        "OceanBiome": 0.00,
+        "DeepOceanBiome": 0.00,
+        "ColdForestBiome": 0.00,
+        "RainforestBiome": 0.00,
+        "TaigaBiome": 0.00,
+        "TundraBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Arctic tundra",
+      "description": "Treeless permafrost plain north of the boreal tree line. Short growing season, lichens and dwarf shrubs, winter pack ice offshore.",
+      "biome_vector": {
+        "TundraBiome": 0.55,
+        "IceBiome": 0.20,
+        "TaigaBiome": 0.10,
+        "WetlandBiome": 0.05,
+        "OceanBiome": 0.05,
+        "DeepOceanBiome": 0.05,
+        "ColdForestBiome": 0.00,
+        "ForestBiome": 0.00,
+        "WarmForestBiome": 0.00,
+        "GrasslandBiome": 0.00,
+        "RainforestBiome": 0.00,
+        "DesertBiome": 0.00
+      }
+    },
+    {
+      "name": "Indo-Pacific archipelago",
+      "description": "Oceanic tropical region — volcanic islands of rainforest and mangrove swamp scattered across warm continental-shelf seas.",
+      "biome_vector": {
+        "OceanBiome": 0.50,
+        "DeepOceanBiome": 0.15,
+        "RainforestBiome": 0.20,
+        "WetlandBiome": 0.10,
+        "WarmForestBiome": 0.05,
+        "ForestBiome": 0.00,
+        "ColdForestBiome": 0.00,
+        "TaigaBiome": 0.00,
+        "TundraBiome": 0.00,
+        "GrasslandBiome": 0.00,
+        "DesertBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Appalachian temperate forest",
+      "description": "Deciduous broadleaf forest on worn-down ancient mountains. Hot-humid summers, snowy winters, rich understory biodiversity.",
+      "biome_vector": {
+        "ForestBiome": 0.55,
+        "WarmForestBiome": 0.20,
+        "ColdForestBiome": 0.10,
+        "WetlandBiome": 0.05,
+        "GrasslandBiome": 0.05,
+        "RainforestBiome": 0.05,
+        "OceanBiome": 0.00,
+        "DeepOceanBiome": 0.00,
+        "TaigaBiome": 0.00,
+        "TundraBiome": 0.00,
+        "DesertBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Antarctic ice sheet",
+      "description": "Continental polar desert of glacial ice, surrounded by the Southern Ocean. Essentially no vegetated land biomes.",
+      "biome_vector": {
+        "IceBiome": 0.80,
+        "DeepOceanBiome": 0.15,
+        "OceanBiome": 0.05,
+        "TundraBiome": 0.00,
+        "TaigaBiome": 0.00,
+        "ColdForestBiome": 0.00,
+        "ForestBiome": 0.00,
+        "WarmForestBiome": 0.00,
+        "RainforestBiome": 0.00,
+        "GrasslandBiome": 0.00,
+        "DesertBiome": 0.00,
+        "WetlandBiome": 0.00
+      }
+    },
+    {
+      "name": "Everglades subtropical wetland",
+      "description": "A slow-moving river of grass threading mangrove swamp and cypress forest at the tip of a subtropical peninsula.",
+      "biome_vector": {
+        "WetlandBiome": 0.55,
+        "WarmForestBiome": 0.20,
+        "GrasslandBiome": 0.10,
+        "OceanBiome": 0.10,
+        "RainforestBiome": 0.05,
+        "ForestBiome": 0.00,
+        "DeepOceanBiome": 0.00,
+        "ColdForestBiome": 0.00,
+        "TaigaBiome": 0.00,
+        "TundraBiome": 0.00,
+        "DesertBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    },
+    {
+      "name": "Patagonian coastal steppe",
+      "description": "Cold dry grassland in the Andean rain shadow, meeting fjord rainforest to the west and the South Atlantic to the east.",
+      "biome_vector": {
+        "GrasslandBiome": 0.40,
+        "ColdForestBiome": 0.20,
+        "RainforestBiome": 0.15,
+        "OceanBiome": 0.15,
+        "DeepOceanBiome": 0.05,
+        "TundraBiome": 0.05,
+        "WarmForestBiome": 0.00,
+        "ForestBiome": 0.00,
+        "TaigaBiome": 0.00,
+        "WetlandBiome": 0.00,
+        "DesertBiome": 0.00,
+        "IceBiome": 0.00
+      }
+    }
+  ]
+}

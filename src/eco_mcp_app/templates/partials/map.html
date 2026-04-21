@@ -1,0 +1,59 @@
+{# Map + property overlay card.
+
+  Renders the live WorldPreview.gif (inlined as a data: URI because Claude
+  Desktop's CSP blocks external origins — claude-ai-mcp#40) and overlays an
+  SVG with a <polygon> per property deed. Hover any polygon to see the
+  owner + deed name via an SVG <title> tooltip — no JS needed.
+#}
+<div class="eco-map">
+  <div class="eco-map__head">
+    <div>
+      <strong>World map</strong>
+      <span class="eco-map__meta">
+        {{ deedCount }} deed{{ '' if deedCount == 1 else 's' }} ·
+        {{ ownerCount }} owner{{ '' if ownerCount == 1 else 's' }} ·
+        {{ worldDim.x }} × {{ worldDim.z }}
+      </span>
+    </div>
+    {% if sourceUrl %}
+      <small class="eco-map__source">{{ sourceUrl }}</small>
+    {% endif %}
+  </div>
+  <div class="eco-map__frame" style="width:{{ renderSize }}px;height:{{ renderSize }}px">
+    <img class="eco-map__preview"
+         src="{{ gifDataUri }}"
+         alt="Eco world preview"
+         width="{{ renderSize }}" height="{{ renderSize }}">
+    <svg class="eco-map__overlay"
+         viewBox="0 0 {{ renderSize }} {{ renderSize }}"
+         width="{{ renderSize }}" height="{{ renderSize }}"
+         xmlns="http://www.w3.org/2000/svg">
+      {% for poly in polygons %}
+        <polygon points="{{ poly.points }}"
+                 fill="{{ poly.fill }}"
+                 stroke="{{ poly.stroke }}"
+                 stroke-width="1.5">
+          <title>{{ poly.deed }} — {{ poly.owner }}</title>
+        </polygon>
+      {% endfor %}
+    </svg>
+  </div>
+  {% if owners %}
+    <div class="eco-map__legend">
+      {% for owner in owners[:16] %}
+        <span class="eco-map__legend-item">
+          <span class="eco-map__swatch"
+                style="background:{{ owner_colors[owner] }};border-color:{{ owner_strokes[owner] }}"></span>
+          {{ owner }}
+        </span>
+      {% endfor %}
+      {% if owners|length > 16 %}
+        <span class="eco-map__legend-more">+{{ owners|length - 16 }} more</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="eco-map__empty">
+      No property deeds registered yet.
+    </div>
+  {% endif %}
+</div>

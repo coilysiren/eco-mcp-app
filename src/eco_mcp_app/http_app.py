@@ -29,9 +29,11 @@ from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import BaseRoute, Mount, Route
 
 from .livereload import DEBUG, livereload_route
+from .map import build_map_payload, fetch_map_bundle
 from .server import (
     _render_card,
     _render_error,
+    _render_map,
     _render_shell,
     build_server,
     fetch_eco_info,
@@ -77,6 +79,7 @@ def create_app() -> Starlette:
                 "service": "eco-mcp-app",
                 "mcp": "/mcp/",
                 "preview": "/preview",
+                "previewMap": "/preview-map",
                 "health": "/healthz",
             }
         )
@@ -97,6 +100,17 @@ def create_app() -> Starlette:
             fragment = _render_card(to_payload(info))
         return HTMLResponse(_render_shell(prerendered=fragment))
 
+    async def preview_map(request: Request) -> HTMLResponse:
+        """Render the iframe shell with the map card inline — dev preview."""
+        server_arg = request.query_params.get("server")
+        try:
+            bundle = await fetch_map_bundle(server_arg)
+        except httpx.HTTPError as e:
+            fragment = _render_error(str(e))
+        else:
+            fragment = _render_map(build_map_payload(bundle))
+        return HTMLResponse(_render_shell(prerendered=fragment))
+
     async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
         await session_manager.handle_request(scope, receive, send)
 
@@ -104,6 +118,7 @@ def create_app() -> Starlette:
         Route("/", root, methods=["GET"]),
         Route("/healthz", healthz, methods=["GET"]),
         Route("/preview", preview, methods=["GET"]),
+        Route("/preview-map", preview_map, methods=["GET"]),
         Mount("/mcp", app=handle_mcp),
     ]
     if DEBUG:

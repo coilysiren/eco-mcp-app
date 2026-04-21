@@ -16,7 +16,19 @@ async def test_list_tools_advertises_all_tools() -> None:
     handler = mcp.request_handlers[mt.ListToolsRequest]
     result = await handler(mt.ListToolsRequest(method="tools/list"))
     names = {tool.name for tool in result.root.tools}
-    assert names == {"get_eco_server_status", "get_eco_economy", "list_public_eco_servers"}
+    assert names == {
+        "get_eco_server_status",
+        "list_public_eco_servers",
+        "get_eco_economy",
+        "get_eco_map",
+        "get_eco_milestones",
+        "get_eco_species",
+        "explain_eco_item",
+        "get_eco_crafting_atlas",
+        "fair_price",
+        "get_eco_government",
+        "get_eco_ecoregion",
+    }
 
 
 @pytest.mark.asyncio

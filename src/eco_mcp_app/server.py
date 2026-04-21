@@ -35,6 +35,8 @@ from mcp.types import (
 )
 from pydantic import AnyUrl
 
+from .map import build_map_payload, fetch_map_bundle
+
 DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
 DEFAULT_ECO_PORT = int(os.environ.get("ECO_INFO_PORT", "3001"))
 STEAM_URL = "https://store.steampowered.com/app/382310/Eco/"
@@ -424,6 +426,30 @@ def _render_card(payload: dict[str, Any]) -> str:
 
 def _render_error(message: str) -> str:
     return _JINJA.get_template("partials/error.html").render(message=message)
+
+
+def _render_map(payload: dict[str, Any]) -> str:
+    """Render the map card fragment."""
+    return _JINJA.get_template("partials/map.html").render(**payload)
+
+
+def _format_map_markdown(payload: dict[str, Any]) -> str:
+    """Plain-text fallback for hosts without the iframe."""
+    dim = payload.get("worldDim") or {}
+    lines = [
+        f"**Eco world map** — {dim.get('x', '?')} x {dim.get('z', '?')}",
+        "",
+        f"- Deeds: **{payload['deedCount']}** across "
+        f"**{payload['ownerCount']}** owner{'s' if payload['ownerCount'] != 1 else ''}",
+    ]
+    owners = payload.get("owners") or []
+    if owners:
+        shown = ", ".join(owners[:10])
+        more = f" (+{len(owners) - 10} more)" if len(owners) > 10 else ""
+        lines.append(f"- Owners: {shown}{more}")
+    if payload.get("sourceUrl"):
+        lines.append(f"- Source: `{payload['sourceUrl']}`")
+    return "\n".join(lines)
 
 
 def _render_shell(prerendered: str | None = None) -> str:
@@ -963,6 +989,33 @@ def build_server() -> Server:
                 },
             ),
             Tool(
+                name="get_eco_map",
+                title="Eco — world map + property deeds",
+                description=(
+                    "Render the live Eco world preview with property deed "
+                    "boundaries overlaid. Each deed is drawn as a translucent "
+                    "polygon colored by owner; hover any polygon to see the "
+                    "deed and owner name. Defaults to the server configured "
+                    "via ECO_INFO_URL; pass `server` (host, host:port, or a "
+                    "full base URL) to target a different one."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": (
+                                "Eco server base to query. Accepts bare host, "
+                                "host:port, or a full URL. Omit to use the "
+                                "default server."
+                            ),
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                **{"_meta": UI_META},
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -1049,6 +1102,32 @@ def build_server() -> Server:
                         "ui/resourceUri": ECONOMY_RESOURCE_URI,
                     }
                 },
+            )
+
+        if name == "get_eco_map":
+            server_arg = arguments.get("server") if arguments else None
+            try:
+                bundle = await fetch_map_bundle(server_arg)
+            except httpx.HTTPError as e:
+                err_payload = {"view": "error", "message": f"Could not reach Eco server: {e}"}
+                return CallToolResult(
+                    content=[
+                        TextContent(type="text", text=f"**Eco server unreachable:** {e}"),
+                        TextContent(type="text", text=json.dumps(err_payload)),
+                        TextContent(type="text", text=HTMX_PREFIX + _render_error(str(e))),
+                    ],
+                    isError=True,
+                    **{"_meta": UI_META},
+                )
+            payload = build_map_payload(bundle)
+            json_payload = {k: v for k, v in payload.items() if k != "gifDataUri"}
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=_format_map_markdown(payload)),
+                    TextContent(type="text", text=json.dumps(json_payload)),
+                    TextContent(type="text", text=HTMX_PREFIX + _render_map(payload)),
+                ],
+                **{"_meta": UI_META},
             )
 
         if name != "get_eco_server_status":

@@ -9,14 +9,13 @@ from typing import Any
 
 import httpx
 from mcp.server.lowlevel import NotificationOptions, Server
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import (
     CallToolResult,
-    ReadResourceResult,
     Resource,
     TextContent,
-    TextResourceContents,
     Tool,
 )
 from pydantic import AnyUrl
@@ -173,19 +172,13 @@ async def serve() -> None:
         ]
 
     @server.read_resource()
-    async def read_resource(uri: AnyUrl) -> ReadResourceResult:
+    async def read_resource(uri: AnyUrl) -> list[ReadResourceContents]:
         if str(uri) != RESOURCE_URI:
             raise ValueError(f"Unknown resource: {uri}")
         html = _load_ui_html()
-        return ReadResourceResult(
-            contents=[
-                TextResourceContents(
-                    uri=AnyUrl(RESOURCE_URI),
-                    mimeType=RESOURCE_MIME,
-                    text=html,
-                )
-            ]
-        )
+        # The SDK wraps each item into TextResourceContents or BlobResourceContents
+        # based on whether .content is str or bytes.
+        return [ReadResourceContents(content=html, mime_type=RESOURCE_MIME)]
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:

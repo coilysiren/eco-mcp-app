@@ -279,5 +279,5 @@ async def test_get_eco_species_tool_returns_card_blocks() -> None:
     assert payload["speciesId"] == "BisonSpecies"
     assert payload["populationLatest"] == 24
     assert fragment.startswith("HTMX:")
-    assert "species-card" in fragment
+    assert 'class="species"' in fragment
     assert "<svg" in fragment  # sparkline rendered

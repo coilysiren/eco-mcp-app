@@ -52,6 +52,29 @@ spec:
       remoteRef:
         key: /eco-mcp-app/fred-api-key
 ---
+# Eco admin API token — needed by the /preview/get_eco_economy card and the
+# economy MCP tool to call the admin /datasets/get endpoint. The pod has no
+# AWS credentials, so boto3.client("ssm") in _load_admin_token() fails and
+# the card renders its empty state. Sync the SSM param into a K8s Secret
+# and mount it as ECO_ADMIN_TOKEN — same pattern as /github/pat above.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: eco-admin-token
+  namespace: ${NAME}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-parameter-store
+    kind: ClusterSecretStore
+  target:
+    name: eco-admin-token
+    creationPolicy: Owner
+  data:
+    - secretKey: token
+      remoteRef:
+        key: /eco-mcp-app/api-admin-token
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -97,6 +120,11 @@ spec:
                 secretKeyRef:
                   name: ${NAME}-fred
                   key: FRED_API_KEY
+            - name: ECO_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: eco-admin-token
+                  key: token
           ports:
             - containerPort: 80
           readinessProbe:

@@ -101,24 +101,26 @@ speaks MCP over Streamable-HTTP at `/mcp/` via `src/eco_mcp_app/http_app.py`
 at `/healthz`.
 
 Pipeline: `.github/workflows/build-and-publish.yml` builds the image and
-pushes to `ghcr.io/coilysiren/eco-mcp-app/...` on every push to `main`, then
-a second job uses Tailscale to reach the cluster and applies `deploy/main.yml`
-via `make .deploy`. All cluster + Tailscale creds are GH Actions secrets; no
-plaintext secrets in the repo.
+pushes to `ghcr.io/coilysiren/eco-mcp-app/...` on every push to `main`, then a
+second job uses Tailscale to reach the cluster and applies `deploy/main.yml`
+via `make .deploy`. The manifest is self-bootstrapping — the `Namespace` lives
+at the top of `deploy/main.yml` so the first deploy creates it alongside the
+Deployment / Service / Ingress in a single `kubectl apply`. No manual cluster
+prep needed.
 
-One-time bootstrap (run from a machine with kubectl access + AWS SSM creds —
-pulls the GHCR pull-secret PAT from `aws ssm /github/pat`, no secrets read into
-shell):
+After the first `git push` publishes the image to GHCR, make the package
+public at
+<https://github.com/users/coilysiren/packages/container/eco-mcp-app%2Fcoilysiren-eco-mcp-app/settings>
+(Package settings → Change visibility → Public). Packages inherit from the
+repo but only on first push; they default to private. With a public image, no
+`imagePullSecrets` is needed. If you flip the package back to private later,
+run `make deploy-secrets-docker-repo` once (pulls the GHCR PAT from
+`aws ssm /github/pat` without reading it into your shell) and add the pull-secret
+line back to `deploy/main.yml`.
 
-```sh
-make deploy-namespace
-make deploy-secrets-docker-repo
-```
-
-After that, every `git push` to main deploys. No secrets needed at runtime —
-the `/info` endpoint of the upstream Eco server is public, and the tool accepts
-the target server as an argument so a single deployment can query any public
-Eco server.
+Runtime has no secrets — the `/info` endpoint of the upstream Eco server is
+public, and the tool accepts the target server as an argument so a single
+deployment can query any public Eco server.
 
 ## Smoke test
 

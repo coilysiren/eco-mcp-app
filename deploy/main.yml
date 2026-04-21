@@ -1,3 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${NAME}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,8 +19,10 @@ spec:
       labels:
         app: ${NAME}-app
     spec:
-      imagePullSecrets:
-        - name: docker-registry
+      # The GHCR package is public (repo is public), so no pull-secret needed.
+      # If you flip it to private, add: imagePullSecrets: [{name: docker-registry}]
+      # and run `make deploy-secrets-docker-repo` once to seed the pull-secret
+      # from the GitHub PAT stored in `aws ssm /github/pat`.
       containers:
         - name: ${NAME}
           image: ${IMAGE}

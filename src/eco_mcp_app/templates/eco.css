@@ -279,3 +279,26 @@
   .credits-line a:hover { color: #c7e87a;
     border-bottom-color: #c7e87a; }
   .credits-line .sep { color: rgba(165, 209, 74, 0.4); }
+
+  /* ---- economy card extras ---- */
+  .econ-badge.econ-healthy { background: rgba(165, 209, 74, 0.2);
+    color: var(--leaf-bright); border-color: rgba(165, 209, 74, 0.45); }
+  .econ-badge.econ-healthy .dot { background: var(--leaf-bright);
+    box-shadow: 0 0 6px var(--leaf-bright); }
+  .econ-badge.econ-booming { background: rgba(244, 192, 78, 0.2);
+    color: var(--sun); border-color: rgba(244, 192, 78, 0.55); }
+  .econ-badge.econ-booming .dot { background: var(--sun);
+    box-shadow: 0 0 8px var(--sun); }
+  .econ-badge.econ-stressed { background: rgba(229, 143, 44, 0.22);
+    color: var(--sunset); border-color: rgba(229, 143, 44, 0.55); }
+  .econ-badge.econ-stressed .dot { background: var(--sunset);
+    box-shadow: 0 0 8px var(--sunset); }
+
+  .narrative-healthy { border-left: 3px solid var(--leaf-bright); }
+  .narrative-booming { border-left: 3px solid var(--sun); }
+  .narrative-stressed { border-left: 3px solid var(--sunset); }
+
+  .spark-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .spark-card .spark {
+    display: block; width: 100%; height: 40px; margin: 8px 0 4px;
+  }

@@ -31,6 +31,27 @@ spec:
       remoteRef:
         key: /github/pat
 ---
+# FRED API key for fair_price. SSM param lives in us-east-1, synced
+# into a plain Opaque secret and injected as FRED_API_KEY env var so
+# the app's env-var path resolves the key (boto3 isn't in the image).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ${NAME}-fred
+  namespace: ${NAME}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-parameter-store
+    kind: ClusterSecretStore
+  target:
+    name: ${NAME}-fred
+    creationPolicy: Owner
+  data:
+    - secretKey: FRED_API_KEY
+      remoteRef:
+        key: /eco-mcp-app/fred-api-key
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -71,6 +92,11 @@ spec:
           env:
             - name: PORT
               value: "80"
+            - name: FRED_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ${NAME}-fred
+                  key: FRED_API_KEY
           ports:
             - containerPort: 80
           readinessProbe:

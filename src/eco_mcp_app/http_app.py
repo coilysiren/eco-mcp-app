@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import httpx
+import mcp.types as mt
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -31,6 +32,7 @@ from starlette.routing import BaseRoute, Mount, Route
 from .livereload import DEBUG, livereload_route
 from .map import build_map_payload, fetch_map_bundle
 from .server import (
+    HTMX_PREFIX,
     _render_card,
     _render_error,
     _render_map,
@@ -73,14 +75,19 @@ def create_app() -> Starlette:
         async with session_manager.run():
             yield
 
+    call_tool_handler = mcp_server.request_handlers[mt.CallToolRequest]
+    list_tools_handler = mcp_server.request_handlers[mt.ListToolsRequest]
+
     async def root(_: Request) -> JSONResponse:
+        tools_result = await list_tools_handler(mt.ListToolsRequest(method="tools/list"))
+        names = sorted(t.name for t in tools_result.root.tools)
         return JSONResponse(
             {
                 "service": "eco-mcp-app",
                 "mcp": "/mcp/",
-                "preview": "/preview",
-                "previewMap": "/preview-map",
                 "health": "/healthz",
+                "preview": "/preview",
+                "previewTools": [f"/preview/{name}" for name in names],
             }
         )
 
@@ -111,6 +118,34 @@ def create_app() -> Starlette:
             fragment = _render_map(build_map_payload(bundle))
         return HTMLResponse(_render_shell(prerendered=fragment))
 
+    async def preview_tool(request: Request) -> HTMLResponse:
+        """Dispatch any MCP tool by name and splice its HTMX fragment into the shell.
+
+        Query-string args are passed straight through as the tool's `arguments`,
+        so `/preview/get_eco_species?name=Bison` and
+        `/preview/explain_eco_item?name=Iron&category=material` work out of the
+        box. Tools that produce no HTMX fragment (e.g. list_public_eco_servers)
+        render the empty iframe shell — still useful as a signal that the tool
+        was reachable.
+        """
+        tool_name = request.path_params["tool"]
+        args = dict(request.query_params)
+        req = mt.CallToolRequest(
+            method="tools/call",
+            params=mt.CallToolRequestParams(name=tool_name, arguments=args),
+        )
+        try:
+            result = await call_tool_handler(req)
+        except Exception as e:
+            return HTMLResponse(_render_shell(prerendered=_render_error(str(e))))
+        fragment = ""
+        for block in result.root.content:
+            text = getattr(block, "text", "") or ""
+            if text.startswith(HTMX_PREFIX):
+                fragment = text[len(HTMX_PREFIX) :]
+                break
+        return HTMLResponse(_render_shell(prerendered=fragment))
+
     async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
         await session_manager.handle_request(scope, receive, send)
 
@@ -119,6 +154,7 @@ def create_app() -> Starlette:
         Route("/healthz", healthz, methods=["GET"]),
         Route("/preview", preview, methods=["GET"]),
         Route("/preview-map", preview_map, methods=["GET"]),
+        Route("/preview/{tool}", preview_tool, methods=["GET"]),
         Mount("/mcp", app=handle_mcp),
     ]
     if DEBUG:

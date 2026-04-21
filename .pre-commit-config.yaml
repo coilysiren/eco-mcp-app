@@ -14,3 +14,13 @@ repos:
           - httpx>=0.28.0
           - mcp>=1.14.0
           - pydantic>=2.0
+
+  - repo: local
+    hooks:
+      - id: trufflehog
+        name: trufflehog (secret scan, offline)
+        description: Detect secrets in staged changes via local trufflehog binary (no API verification).
+        entry: trufflehog git file://. --since-commit HEAD --no-verification --no-update --fail
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]

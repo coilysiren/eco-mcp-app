@@ -229,22 +229,32 @@
 
 <script>
 (() => {
-  // ---- iframe sizing (claude-ai-mcp#69 workaround) ----
-  // Claude.ai reads documentElement.height directly from the iframe DOM and
-  // snapshots it early — later expansions do NOT resize the container. So:
-  //   1. CSS already sets html/body to a generous fixed 780px
-  //   2. After render, temporarily set html height to "max-content", measure
-  //      the real content height, then set documentElement.style.height to
-  //      max(measured, 780). Mirrors ext-apps SDK's setupSizeChangedNotifications.
-  //   3. No ResizeObserver — it fires pre-render and locks the iframe tiny.
-  function syncHeight() {
-    const de = document.documentElement;
-    const prev = de.style.height;
-    de.style.height = "max-content";
-    const measured = Math.ceil(de.getBoundingClientRect().height);
-    const target = Math.max(measured, 780);
-    de.style.height = target + "px";
-    console.log("[eco-mcp-app] syncHeight — content=" + measured + " final=" + target);
+  // ---- iframe sizing ----
+  // Claude Desktop reveals the iframe only after ui/notifications/initialized
+  // and sizes it based on ui/notifications/size-changed notifications — not
+  // by observing documentElement.style.height, despite what claude-ai-mcp#69
+  // says. Mirrors ext-apps SDK setupSizeChangedNotifications exactly.
+  let lastW = 0, lastH = 0, sizePending = false;
+  function measureAndNotify() {
+    if (sizePending) return;
+    sizePending = true;
+    requestAnimationFrame(() => {
+      sizePending = false;
+      const de = document.documentElement;
+      const prev = de.style.height;
+      de.style.height = "max-content";
+      const h = Math.ceil(de.getBoundingClientRect().height);
+      de.style.height = prev;
+      const w = Math.ceil(window.innerWidth);
+      if (w === lastW && h === lastH) return;
+      lastW = w; lastH = h;
+      send({
+        jsonrpc: "2.0",
+        method: "ui/notifications/size-changed",
+        params: { width: w, height: h }
+      });
+      console.log("[eco-mcp-app] size-changed:", w + "x" + h);
+    });
   }
 
   // ---- starfield ----
@@ -306,7 +316,14 @@
       });
       console.log("[eco-mcp-app] ui/initialize ok:", r);
       send({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
-      console.log("[eco-mcp-app] initialized; waiting for ui/notifications/tool-result");
+      console.log("[eco-mcp-app] initialized");
+      // Only start observing AFTER initialized — per the SDK pattern, so the
+      // host is actually listening. Measure+notify once up front, then on every
+      // content change via ResizeObserver on html + body.
+      measureAndNotify();
+      const ro = new ResizeObserver(measureAndNotify);
+      ro.observe(document.documentElement);
+      ro.observe(document.body);
     } catch (e) {
       console.error("[eco-mcp-app] ui/initialize failed:", e);
     }
@@ -427,7 +444,9 @@
         el.style.setProperty("--w", "0%");
         requestAnimationFrame(() => el.style.setProperty("--w", w));
       });
-      syncHeight();  // content just changed; re-measure
+      // ResizeObserver will pick up the content change and fire size-changed,
+      // but kick it explicitly too in case the observer is late.
+      measureAndNotify();
     });
   }
 

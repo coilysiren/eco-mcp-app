@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Eco MCP App — test harness</title>
+<style>
+  body { background: #0a0a0a; margin: 0; padding: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #e8f5e9; }
+  .controls { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .controls button { padding: 6px 12px; background: #1a2f1e; color: #fff;
+    border: 1px solid #333; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .controls button:hover { background: #253d2a; }
+  .controls #status { color: #888; font-size: 11px; font-family: monospace; }
+  iframe { width: 100%; max-width: 1120px; border: 1px dashed #333;
+    visibility: hidden; display: block; background: #000; }
+</style>
+</head>
+<body>
+<div class="controls">
+  <strong style="color:#a5d14a">eco-mcp-app harness</strong>
+  <button onclick="sendToolResult()">Re-send tool-result</button>
+  <span id="status">Loading…</span>
+</div>
+<iframe id="app" src="../src/eco_mcp_app/ui/eco.html"></iframe>
+
+<script>
+// Mimic Claude.ai's MCP Apps host behavior so we can preview the iframe
+// without needing a real Claude Desktop session. In particular:
+//   - Respond to ui/initialize with a valid result (so the app resolves its
+//     initialize promise and considers itself connected).
+//   - On receipt of ui/notifications/initialized, "reveal" the iframe and
+//     snapshot its inline documentElement.style.height (the #69 mechanism).
+//   - After reveal, push a ui/notifications/tool-result with a canned payload
+//     so render() runs.
+const iframe = document.getElementById("app");
+const statusEl = document.getElementById("status");
+
+function log(...a) { console.log("[harness]", ...a); }
+
+window.addEventListener("message", (evt) => {
+  if (evt.source !== iframe.contentWindow) return;
+  const m = evt.data;
+  if (!m || m.jsonrpc !== "2.0") return;
+  if (m.method === "ui/initialize") {
+    log("ui/initialize received:", m.params);
+    iframe.contentWindow.postMessage({
+      jsonrpc: "2.0", id: m.id,
+      result: {
+        protocolVersion: "2026-01-26",
+        hostInfo: { name: "eco-harness", version: "0.1.0" },
+        hostCapabilities: {},
+        hostContext: {}
+      }
+    }, "*");
+  } else if (m.method === "ui/notifications/initialized") {
+    log("ui/notifications/initialized — revealing iframe");
+    iframe.style.visibility = "visible";
+    setTimeout(sendToolResult, 250);
+  } else if (m.method === "ui/notifications/size-changed") {
+    // Claude Desktop listens to size-changed. The earlier assumption that it
+    // reads documentElement.style.height (claude-ai-mcp#69) doesn't match
+    // observed behavior, or is version-specific.
+    const { width, height } = m.params || {};
+    if (height) {
+      iframe.style.height = height + "px";
+      statusEl.textContent = `size-changed → ${width}x${height}`;
+      log("size-changed:", width, "x", height);
+    }
+  } else {
+    log("other:", m);
+  }
+});
+
+function sendToolResult() {
+  const payload = {
+    view: "eco_status",
+    fetchedAtISO: new Date().toISOString(),
+    server: {
+      description: "Eco via Sirens | Cycle 13 | High Collab | 72x72",
+      detailedDescription: "",
+      category: "Established",
+      discord: "https://discord.gg/mGhwcAb98y",
+      version: "0.13.0.2 beta release-1006",
+      language: "English",
+      paused: false,
+      hasPassword: false,
+      adminOnline: true
+    },
+    players: { online: 6, total: 67, activeAndOnline: 27, peakActive: 38 },
+    world: { size: "0.52km²", plants: 95683, animals: 0, laws: 1, totalCulture: 171.0 },
+    cycle: {
+      daysRunning: 2, daysUntilMeteor: 57, hasMeteor: true,
+      collaboration: "HighCollaboration", gameSpeed: "Slow", simulationLevel: "Normal"
+    },
+    economy: { description: "473 trades, 0 contracts" },
+    exhaustion: { active: false, afterHours: 3.0, hoursPerWeekday: {} },
+    playtimesPattern: "",
+    achievements: [
+      { name: "Cultural Awakening", text: "Create 250 total culture as a world." },
+      { name: "Sparkling Canvas", text: "Create 50 total culture as a world." }
+    ]
+  };
+  iframe.contentWindow.postMessage({
+    jsonrpc: "2.0",
+    method: "ui/notifications/tool-result",
+    params: {
+      result: {
+        content: [
+          { type: "text", text: "**Eco via Sirens** — markdown fallback" },
+          { type: "text", text: JSON.stringify(payload) }
+        ]
+      },
+      toolName: "get_eco_server_status",
+      toolInput: {}
+    }
+  }, "*");
+  log("sent tool-result");
+}
+</script>
+</body>
+</html>

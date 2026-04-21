@@ -83,21 +83,212 @@ stack. Eco itself is by [Strange Loop Games](https://strangeloopgames.com/);
 canonical references: ModKit [10], modding docs [11], Eco wiki modding page [12],
 the Discord bridge plugin [13], and mod catalog [14].
 
-## Install (local, Claude Desktop)
+## Available tools
 
-Claude Desktop only loads MCPs at startup, so install + restart:
+- **`get_eco_server_status`** — live status of any public Eco server. Returns
+  three content blocks: a markdown summary (for text-only hosts), a JSON
+  payload with every field the UI consumes, and an HTMX fragment that
+  Claude Desktop swaps into the iframe via the MCP Apps protocol.
+  - Optional argument: `server` (string) — a bare host (`eco.example.com`),
+    `host:port` (`10.0.0.5:4001`), or a full `/info` URL. Omit to use the
+    server configured via the `ECO_INFO_URL` env var (defaults to Kai's
+    server, `http://eco.coilysiren.me:3001/info`).
+
+- **`list_public_eco_servers`** — returns the curated set of public Eco
+  servers bundled with this MCP (label, host:port, notes). Feed any `host`
+  back into `get_eco_server_status` as the `server` argument. Useful for
+  LLMs that want to discover what's queryable without calling the tool
+  blind. No arguments.
+
+## Installation
+
+The fastest path is the hosted instance — no install, no Python, just point
+your client at a URL. For offline work or custom Eco server defaults, pick
+one of the stdio options.
+
+### Option 1 — Hosted HTTP (no install)
+
+A public instance is live at **`https://eco-mcp.coilysiren.me/mcp/`**, speaking
+MCP over Streamable-HTTP (stateless, CORS open). Any client that can connect
+to a remote MCP server works. Supports `get_eco_server_status` against any
+public Eco server you pass via the `server` argument — you don't need to run
+your own instance to query a different server.
+
+### Option 2 — Stdio via `uvx` (recommended for local use)
+
+[`uvx`](https://docs.astral.sh/uv/guides/tools/) fetches + runs the package
+in a one-shot venv. No install step, no Python version management.
 
 ```sh
-cd /Users/kai/projects/coilysiren/eco-mcp-app
-uv sync
-python scripts/install-desktop-config.py
+uvx --from git+https://github.com/coilysiren/eco-mcp-app eco-mcp-app
 ```
 
-Then fully quit Claude Desktop (⌘Q) and relaunch. In a fresh chat:
+### Option 3 — Stdio via local checkout
 
-> *Use eco-mcp-app to show me the Eco server status.*
+```sh
+git clone https://github.com/coilysiren/eco-mcp-app
+cd eco-mcp-app
+uv sync
+uv run eco-mcp-app
+```
 
-You should get the meteor card inline.
+### Option 4 — Docker (HTTP transport)
+
+The published image runs the Streamable-HTTP transport on port 4000:
+
+```sh
+docker run --rm -p 4000:4000 \
+  ghcr.io/coilysiren/eco-mcp-app/coilysiren-eco-mcp-app:latest
+# MCP endpoint at http://localhost:4000/mcp/
+```
+
+## Configuration
+
+Every MCP client takes a slightly different config shape. Pick your client
+below. The `ECO_INFO_URL` env var is always optional — omit it to use Kai's
+server as the default.
+
+### Claude Desktop
+
+`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS,
+`%APPDATA%\Claude\claude_desktop_config.json` on Windows. **Fully quit + relaunch
+Claude Desktop after editing — it only loads MCPs at startup.**
+
+<details>
+<summary>Stdio via <code>uvx</code> (recommended)</summary>
+
+```json
+{
+  "mcpServers": {
+    "eco": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"]
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary>Stdio via local checkout</summary>
+
+```json
+{
+  "mcpServers": {
+    "eco": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/eco-mcp-app", "eco-mcp-app"]
+    }
+  }
+}
+```
+
+Or run `python scripts/install-desktop-config.py` from a local checkout to
+splice this block in automatically.
+</details>
+
+<details>
+<summary>Remote HTTP (hosted)</summary>
+
+Claude Desktop supports remote MCP servers via the **Settings → Connectors**
+UI — add `https://eco-mcp.coilysiren.me/mcp/` there. The visual MCP Apps card
+only renders inside Claude Desktop's chat UI for remote servers when the host
+advertises the `io.modelcontextprotocol/ui` extension capability.
+</details>
+
+### Claude Code
+
+Project-scoped `.mcp.json` at the repo root (picked up automatically), or
+merge into your user-wide MCP config:
+
+<details>
+<summary>Stdio via <code>uvx</code></summary>
+
+```json
+{
+  "mcpServers": {
+    "eco": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"]
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary>Remote HTTP (hosted)</summary>
+
+```sh
+claude mcp add --transport http eco https://eco-mcp.coilysiren.me/mcp/
+```
+</details>
+
+### Cursor / Windsurf / Continue / Cline
+
+These all read an `mcpServers` map — same shape as Claude Desktop. Path:
+
+- **Cursor** — `~/.cursor/mcp.json` (user) or `.cursor/mcp.json` (project)
+- **Windsurf** — `~/.codeium/windsurf/mcp_config.json`
+- **Continue** — `~/.continue/config.json` under `experimental.modelContextProtocolServers`
+- **Cline** — VS Code settings, `cline.mcpServers`
+
+```json
+{
+  "mcpServers": {
+    "eco": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"]
+    }
+  }
+}
+```
+
+### Zed
+
+`~/.config/zed/settings.json`:
+
+```json
+{
+  "context_servers": {
+    "eco": {
+      "command": {
+        "path": "uvx",
+        "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"]
+      }
+    }
+  }
+}
+```
+
+### Generic (pinning a specific Eco server as default)
+
+Set `ECO_INFO_URL` to point the default query at your own Eco server:
+
+```json
+{
+  "mcpServers": {
+    "eco": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/coilysiren/eco-mcp-app", "eco-mcp-app"],
+      "env": {
+        "ECO_INFO_URL": "http://my-eco-server.example.com:3001/info"
+      }
+    }
+  }
+}
+```
+
+Callers can still pass a `server` argument per-tool-call to override.
+
+### Try it
+
+In a fresh chat, after any install method:
+
+> *Use eco to show me the Eco server status.*
+
+You should get the meteor card inline in Claude Desktop, or a markdown
+summary everywhere else.
 
 ## Try it on other public Eco servers
 

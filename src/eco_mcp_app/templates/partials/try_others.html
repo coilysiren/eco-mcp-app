@@ -1,17 +1,10 @@
 <div class="try-others">
   <span class="try-others-label">Try this card on another public Eco server:</span>
   <div class="try-others-pills">
-    <a class="pill" href="/preview"
-       target="_blank" rel="noopener">Eco via Sirens</a>
-    <a class="pill" href="/preview?server=ecoserver.awlgaming.net:5679"
-       target="_blank" rel="noopener">AWLGaming</a>
-    <a class="pill" href="/preview?server=eco.greenleafserver.com:3021"
-       target="_blank" rel="noopener">GreenLeaf Prime</a>
-    <a class="pill" href="/preview?server=eco.greenleafserver.com:3031"
-       target="_blank" rel="noopener">GreenLeaf Vanilla</a>
-    <a class="pill" href="/preview?server=daokingdom.eu:3001"
-       target="_blank" rel="noopener">The Dao Kingdom</a>
-    <a class="pill" href="/preview?server=eco.bleedcraft.com:3001"
-       target="_blank" rel="noopener">Peaceful Utopia</a>
+    {% for s in known_servers %}
+    <a class="pill"
+       {% if loop.first %}href="/preview"{% else %}href="/preview?server={{ s.host }}"{% endif %}
+       target="_blank" rel="noopener" title="{{ s.notes }}">{{ s.label }}</a>
+    {% endfor %}
   </div>
 </div>

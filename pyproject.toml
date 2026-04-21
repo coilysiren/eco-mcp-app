@@ -56,6 +56,13 @@ module = "eco_mcp_app.server"
 disallow_untyped_decorators = false
 disable_error_code = ["arg-type", "no-any-return", "no-untyped-call"]
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+# Tests drive the MCP Server handlers directly and narrow through its
+# union-typed request/response envelopes; full narrowing for every branch
+# is noise, not signal.
+disable_error_code = ["union-attr"]
+
 [dependency-groups]
 dev = [
   "mypy>=1.20.0",

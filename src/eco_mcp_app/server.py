@@ -41,6 +41,43 @@ STEAM_URL = "https://store.steampowered.com/app/382310/Eco/"
 RESOURCE_URI = "ui://eco/status.html"
 RESOURCE_MIME = "text/html;profile=mcp-app"
 
+# Single source of truth for the public servers surfaced both as "try-others"
+# pills on the rendered card and as the `list_public_eco_servers` tool's
+# response. Curated from eco-servers.org, chosen for variety in Eco markup
+# patterns + ruleset (so the iframe gets exercised against diverse titles).
+KNOWN_PUBLIC_SERVERS: list[dict[str, str]] = [
+    {
+        "label": "Eco via Sirens",
+        "host": "eco.coilysiren.me:3001",
+        "notes": "Kai's server (default for this MCP). Highly modded, collaborative.",
+    },
+    {
+        "label": "AWLGaming",
+        "host": "ecoserver.awlgaming.net:5679",
+        "notes": "Hex + named color mix in the TMP title.",
+    },
+    {
+        "label": "GreenLeaf Prime",
+        "host": "eco.greenleafserver.com:3021",
+        "notes": "<#RRGGBB> shorthand rainbow title.",
+    },
+    {
+        "label": "GreenLeaf Vanilla",
+        "host": "eco.greenleafserver.com:3031",
+        "notes": "Same host as Prime, vanilla ruleset.",
+    },
+    {
+        "label": "The Dao Kingdom",
+        "host": "daokingdom.eu:3001",
+        "notes": "Short-form hex + explicit </color> closes.",
+    },
+    {
+        "label": "Peaceful Utopia",
+        "host": "eco.bleedcraft.com:3001",
+        "notes": "No markup in the title; meteor already passed.",
+    },
+]
+
 # The MCP Apps spec puts the resource URI under _meta.ui.resourceUri. Some hosts
 # only honor the legacy flat form `_meta["ui/resourceUri"]` (claude-ai-mcp#71),
 # so set both — servers that do this render in every host we've tested.
@@ -359,6 +396,7 @@ def _render_card(payload: dict[str, Any]) -> str:
         "source_url": payload.get("sourceUrl"),
         "steam_url": STEAM_URL,
         "banner_src": _BANNER_SRC,
+        "known_servers": KNOWN_PUBLIC_SERVERS,
     }
     return _JINJA.get_template("partials/card.html").render(**ctx)
 
@@ -446,7 +484,22 @@ def build_server() -> Server:
                     "additionalProperties": False,
                 },
                 **{"_meta": UI_META},
-            )
+            ),
+            Tool(
+                name="list_public_eco_servers",
+                title="Eco — list public servers",
+                description=(
+                    "List the curated set of public Eco game servers known to this "
+                    "MCP. Returns label, host:port, and free-form notes for each. "
+                    "Feed any `host` back into `get_eco_server_status` as the "
+                    "`server` argument to fetch its live status."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            ),
         ]
 
     @server.list_resources()
@@ -467,6 +520,20 @@ def build_server() -> Server:
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
+        if name == "list_public_eco_servers":
+            lines = ["**Known public Eco servers:**", ""]
+            for s in KNOWN_PUBLIC_SERVERS:
+                lines.append(f"- **{s['label']}** — `{s['host']}` · {s['notes']}")
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text="\n".join(lines)),
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"servers": KNOWN_PUBLIC_SERVERS}),
+                    ),
+                ],
+            )
+
         if name != "get_eco_server_status":
             raise ValueError(f"Unknown tool: {name}")
 

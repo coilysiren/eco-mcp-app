@@ -77,6 +77,22 @@
   }
   .site-nav a:hover { text-decoration: underline; }
 
+  /* Second nav strip — only rendered by the HTTP /preview/<tool> routes, not
+     in the MCP iframe shell. Lists all tool previews for discoverability. */
+  .preview-tools-row {
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px dashed var(--panel-border);
+    align-items: center;
+  }
+  .preview-tools-label {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; color: var(--fg-faint);
+  }
+  .preview-tools-nav { font-size: 12px; gap: 12px; }
+  .preview-tools-nav a[aria-current="page"] {
+    color: var(--sun); text-decoration: underline;
+  }
+
   /* ---- banner ---- */
   .banner-wrap {
     margin: 20px 0 18px; border-radius: 14px; overflow: hidden;

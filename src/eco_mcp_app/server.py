@@ -1112,12 +1112,20 @@ def _get_admin_token() -> str | None:
     return _ECO_ADMIN_TOKEN
 
 
-def _render_shell(prerendered: str | None = None) -> str:
+def _render_shell(
+    prerendered: str | None = None,
+    preview_tools: list[dict[str, str]] | None = None,
+) -> str:
     """Render the iframe shell — what the MCP resource returns.
 
     `prerendered`: if given, placed inside #root instead of the empty state.
     The HTTP /preview endpoint uses this to splice the Jinja2 card into the
     shell directly so a browser sees real data without the MCP handshake.
+
+    `preview_tools`: dev-only list of `{name, href}` entries rendered as a
+    second-row nav so browser visitors can hop between the 11 tool cards.
+    Passed only from the HTTP preview routes — omitted for the MCP resource
+    shell so Claude Desktop doesn't see the navigation strip.
     """
     return _JINJA.get_template("eco.html").render(
         htmx_src=_HTMX_SRC,
@@ -1125,6 +1133,7 @@ def _render_shell(prerendered: str | None = None) -> str:
         favicon_src=_FAVICON_SRC,
         steam_url=STEAM_URL,
         prerendered=Markup(prerendered) if prerendered else None,
+        preview_tools=preview_tools,
     )
 
 

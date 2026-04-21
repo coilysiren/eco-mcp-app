@@ -78,6 +78,36 @@ def create_app() -> Starlette:
     call_tool_handler = mcp_server.request_handlers[mt.CallToolRequest]
     list_tools_handler = mcp_server.request_handlers[mt.ListToolsRequest]
 
+    # Hard-coded default query strings for the tools that need arguments — the
+    # preview nav strip is for browser-poking, not full UX, so a sensible
+    # default gets each card to render something without a 400. Tools omitted
+    # from this map get an empty query string.
+    _PREVIEW_DEFAULTS = {
+        "get_eco_species": "?name=Bison",
+        "explain_eco_item": "?name=Iron&category=material",
+        "fair_price": "?item=Copper",
+    }
+
+    async def _preview_tool_links(current: str | None = None) -> list[dict[str, str]]:
+        tools_result = await list_tools_handler(mt.ListToolsRequest(method="tools/list"))
+        links: list[dict[str, str]] = []
+        for tool in sorted(tools_result.root.tools, key=lambda t: t.name):
+            # Tools with no UI fragment (no `_meta.ui.resourceUri`) aren't worth
+            # linking — clicking through would just show the empty iframe.
+            meta = getattr(tool, "_meta", None) or {}
+            ui = (meta.get("ui") if isinstance(meta, dict) else None) or {}
+            if not ui.get("resourceUri"):
+                continue
+            qs = _PREVIEW_DEFAULTS.get(tool.name, "")
+            links.append(
+                {
+                    "label": tool.name,
+                    "href": f"/preview/{tool.name}{qs}",
+                    "current": "page" if tool.name == current else "",
+                }
+            )
+        return links
+
     async def root(_: Request) -> JSONResponse:
         tools_result = await list_tools_handler(mt.ListToolsRequest(method="tools/list"))
         names = sorted(t.name for t in tools_result.root.tools)
@@ -105,7 +135,8 @@ def create_app() -> Starlette:
             info = redact(raw)
             info["_fetchedAtISO"] = datetime.now(UTC).isoformat()
             fragment = _render_card(to_payload(info))
-        return HTMLResponse(_render_shell(prerendered=fragment))
+        tool_links = await _preview_tool_links(current="get_eco_server_status")
+        return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
 
     async def preview_map(request: Request) -> HTMLResponse:
         """Render the iframe shell with the map card inline — dev preview."""
@@ -116,7 +147,8 @@ def create_app() -> Starlette:
             fragment = _render_error(str(e))
         else:
             fragment = _render_map(build_map_payload(bundle))
-        return HTMLResponse(_render_shell(prerendered=fragment))
+        tool_links = await _preview_tool_links(current="get_eco_map")
+        return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
 
     async def preview_tool(request: Request) -> HTMLResponse:
         """Dispatch any MCP tool by name and splice its HTMX fragment into the shell.
@@ -134,17 +166,20 @@ def create_app() -> Starlette:
             method="tools/call",
             params=mt.CallToolRequestParams(name=tool_name, arguments=args),
         )
+        tool_links = await _preview_tool_links(current=tool_name)
         try:
             result = await call_tool_handler(req)
         except Exception as e:
-            return HTMLResponse(_render_shell(prerendered=_render_error(str(e))))
+            return HTMLResponse(
+                _render_shell(prerendered=_render_error(str(e)), preview_tools=tool_links)
+            )
         fragment = ""
         for block in result.root.content:
             text = getattr(block, "text", "") or ""
             if text.startswith(HTMX_PREFIX):
                 fragment = text[len(HTMX_PREFIX) :]
                 break
-        return HTMLResponse(_render_shell(prerendered=fragment))
+        return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
 
     async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
         await session_manager.handle_request(scope, receive, send)

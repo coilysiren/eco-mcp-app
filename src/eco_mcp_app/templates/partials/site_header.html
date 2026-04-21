@@ -8,4 +8,14 @@
       <a href="https://github.com/coilysiren/eco-mcp-app" target="_blank" rel="noopener">./source</a>
     </nav>
   </div>
+  {% if preview_tools %}
+  <div class="site-header-inner preview-tools-row">
+    <span class="preview-tools-label">tools:</span>
+    <nav class="site-nav preview-tools-nav">
+      {% for t in preview_tools %}
+      <a href="{{ t.href }}"{% if t.current %} aria-current="{{ t.current }}"{% endif %}>{{ t.label }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+  {% endif %}
 </header>

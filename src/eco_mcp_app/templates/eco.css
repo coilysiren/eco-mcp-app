@@ -202,3 +202,18 @@
   .cta.steam:hover { background: #2a475e; }
   .empty { padding: 80px 20px; text-align: center; color: var(--fg-muted); }
   .empty .hint { margin-top: 6px; font-size: 12px; color: var(--fg-faint); }
+
+  /* ---- credits (mirrors coilysiren.me footer, re-palette'd to Eco) ---- */
+  .credits {
+    margin-top: 20px; padding-top: 14px;
+    border-top: 1px dashed rgba(165, 209, 74, 0.18);
+    text-align: center; font-size: 11px; color: var(--fg-faint);
+  }
+  .credits-line { display: inline-flex; gap: 8px; flex-wrap: wrap;
+    align-items: center; justify-content: center; }
+  .credits a { color: var(--leaf); text-decoration: none;
+    border-bottom: 1px dotted rgba(90, 138, 58, 0.45);
+    transition: color 120ms ease, border-color 120ms ease; }
+  .credits a:hover { color: var(--leaf-bright);
+    border-bottom-color: var(--leaf-bright); }
+  .credits .sep { color: rgba(165, 209, 74, 0.25); }

@@ -13,7 +13,7 @@
 <body>
   <div class="leaves"></div>
   <div class="shell" id="root">
-    {% include "partials/empty.html" %}
+    {% if prerendered %}{{ prerendered }}{% else %}{% include "partials/empty.html" %}{% endif %}
   </div>
 
 <script>
@@ -122,5 +122,6 @@
   connect();
 })();
 </script>
+{{ livereload_script | safe }}
 </body>
 </html>

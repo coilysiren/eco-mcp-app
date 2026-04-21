@@ -26,8 +26,9 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
-from starlette.routing import Mount, Route
+from starlette.routing import BaseRoute, Mount, Route
 
+from .livereload import DEBUG, livereload_route
 from .server import (
     _render_card,
     _render_error,
@@ -59,16 +60,6 @@ class NormalizeMcpPath:
         await self.app(scope, receive, send)
 
 
-def _splice_card_into_shell(shell: str, fragment: str) -> str:
-    """Place a rendered card fragment immediately inside #root in the shell."""
-    marker = '<div class="shell" id="root">'
-    idx = shell.find(marker)
-    if idx < 0:
-        return shell
-    splice_at = idx + len(marker)
-    return shell[:splice_at] + fragment + shell[splice_at:]
-
-
 def create_app() -> Starlette:
     mcp_server = build_server()
     # stateless=True: every request gets a fresh transport. Fits the tool shape
@@ -96,7 +87,6 @@ def create_app() -> Starlette:
     async def preview(request: Request) -> HTMLResponse:
         """Render the iframe shell + Jinja2 card inline, bypassing MCP handshake."""
         server_arg = request.query_params.get("server")
-        shell = _render_shell()
         try:
             raw = await fetch_eco_info(server_arg)
         except httpx.HTTPError as e:
@@ -105,20 +95,20 @@ def create_app() -> Starlette:
             info = redact(raw)
             info["_fetchedAtISO"] = datetime.now(UTC).isoformat()
             fragment = _render_card(to_payload(info))
-        return HTMLResponse(_splice_card_into_shell(shell, fragment))
+        return HTMLResponse(_render_shell(prerendered=fragment))
 
     async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
         await session_manager.handle_request(scope, receive, send)
 
-    inner = Starlette(
-        lifespan=lifespan,
-        routes=[
-            Route("/", root, methods=["GET"]),
-            Route("/healthz", healthz, methods=["GET"]),
-            Route("/preview", preview, methods=["GET"]),
-            Mount("/mcp", app=handle_mcp),
-        ],
-    )
+    routes: list[BaseRoute] = [
+        Route("/", root, methods=["GET"]),
+        Route("/healthz", healthz, methods=["GET"]),
+        Route("/preview", preview, methods=["GET"]),
+        Mount("/mcp", app=handle_mcp),
+    ]
+    if DEBUG:
+        routes.append(livereload_route)
+    inner = Starlette(lifespan=lifespan, routes=routes)
     inner.add_middleware(NormalizeMcpPath)
     return inner
 

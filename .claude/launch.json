@@ -10,8 +10,10 @@
     },
     {
       "name": "eco-http",
-      "runtimeExecutable": "uv",
+      "runtimeExecutable": "env",
       "runtimeArgs": [
+        "DEBUG=1",
+        "uv",
         "run",
         "uvicorn",
         "eco_mcp_app.http_app:app",

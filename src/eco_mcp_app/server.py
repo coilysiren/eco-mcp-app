@@ -62,7 +62,13 @@ HTMX_PREFIX = "HTMX:"
 # the only tag that carries visible meaning in a plain-text card); everything
 # else is stripped. Contents are always escape-then-interpolated so the output
 # stays XSS-safe even though it's marked Markup.
-_TMP_TOKEN = re.compile(r"<color=#?([A-Za-z0-9]+)>|</color>", re.IGNORECASE)
+# TMP accepts both `<color=…>` and the shorthand `<#RRGGBB>` / `<#RRGGBBAA>`.
+# Both open forms share the same color stack and </color> closes either.
+# Capture group 1 = value from `<color=…>`, group 2 = value from `<#…>`.
+_TMP_TOKEN = re.compile(
+    r"<color=#?([A-Za-z0-9]+)>|<#([0-9a-fA-F]{3,8})>|</color>",
+    re.IGNORECASE,
+)
 _TMP_OTHER_TAG = re.compile(
     r"</?(?:b|i|u|s|size|sprite|icon|style|mark|lowercase|uppercase|smallcaps)"
     r"(?:\s[^>]*)?/?>",
@@ -114,14 +120,17 @@ def format_eco_markup(text: str | None) -> Markup:
     pos = 0
     for m in _TMP_TOKEN.finditer(text):
         out.append(str(escape(text[pos : m.start()])))
-        raw_open = m.group(1)
-        if raw_open is not None:
-            if raw_open.lower() in _TMP_NAMED_COLORS:
-                color = raw_open.lower()
-            elif re.fullmatch(r"[0-9a-fA-F]{3,8}", raw_open):
-                color = f"#{raw_open}"
+        color_word = m.group(1)  # from <color=...>
+        hex_short = m.group(2)  # from <#RRGGBB>
+        if color_word is not None or hex_short is not None:
+            raw = color_word if color_word is not None else hex_short
+            assert raw is not None
+            if raw.lower() in _TMP_NAMED_COLORS:
+                color = raw.lower()
+            elif re.fullmatch(r"[0-9a-fA-F]{3,8}", raw):
+                color = f"#{raw}"
             else:
-                color = raw_open.lower()
+                color = raw.lower()
             out.append(f'<span style="color:{escape(color)}">')
             depth += 1
         else:  # </color>
@@ -165,6 +174,12 @@ def _build_jinja_env() -> Environment:
         x is not None and x != "" and x != 0 and x != "0" for x in xs
     )
     env.globals["fmt"] = _fmt_number
+    # Dev-only browser livereload. Empty string in production so the
+    # `{{ livereload_script | safe }}` in the shell is a no-op.
+    from .livereload import DEBUG as _DEBUG
+    from .livereload import LIVERELOAD_SCRIPT as _LIVERELOAD_SCRIPT
+
+    env.globals["livereload_script"] = _LIVERELOAD_SCRIPT if _DEBUG else ""
     return env
 
 
@@ -331,12 +346,18 @@ def _render_error(message: str) -> str:
     return _JINJA.get_template("partials/error.html").render(message=message)
 
 
-def _render_shell() -> str:
-    """Render the iframe shell — what the MCP resource returns."""
+def _render_shell(prerendered: str | None = None) -> str:
+    """Render the iframe shell — what the MCP resource returns.
+
+    `prerendered`: if given, placed inside #root instead of the empty state.
+    The HTTP /preview endpoint uses this to splice the Jinja2 card into the
+    shell directly so a browser sees real data without the MCP handshake.
+    """
     return _JINJA.get_template("eco.html").render(
         htmx_src=_HTMX_SRC,
         banner_src=_BANNER_SRC,
         steam_url=STEAM_URL,
+        prerendered=Markup(prerendered) if prerendered else None,
     )
 
 

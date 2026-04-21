@@ -119,6 +119,8 @@ uvicorn==0.44.0
 uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'
     # via uvicorn
 watchfiles==1.1.1
-    # via uvicorn
+    # via
+    #   eco-mcp-app
+    #   uvicorn
 websockets==16.0
     # via uvicorn

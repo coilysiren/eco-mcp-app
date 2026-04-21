@@ -35,11 +35,19 @@ from mcp.types import (
 )
 from pydantic import AnyUrl
 
+from .crafting import atlas_template_context, fetch_atlas
+
 DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
 DEFAULT_ECO_PORT = int(os.environ.get("ECO_INFO_PORT", "3001"))
 STEAM_URL = "https://store.steampowered.com/app/382310/Eco/"
 RESOURCE_URI = "ui://eco/status.html"
 RESOURCE_MIME = "text/html;profile=mcp-app"
+
+# Admin endpoints (exporter/*) require an API key. We read it from the
+# environment (populated by SSM at boot in the homelab deploy, or set by hand
+# for local dev / tests). None → the tool will still run but get 401s, which
+# surface as per-action warnings on the rendered card.
+ADMIN_API_KEY_ENV = "ECO_ADMIN_API_KEY"
 
 # Single source of truth for the public servers surfaced both as "try-others"
 # pills on the rendered card and as the `list_public_eco_servers` tool's
@@ -405,6 +413,38 @@ def _render_error(message: str) -> str:
     return _JINJA.get_template("partials/error.html").render(message=message)
 
 
+def _render_crafting_atlas(ctx: dict[str, Any]) -> str:
+    return _JINJA.get_template("partials/crafting.html").render(**ctx)
+
+
+def _format_crafting_markdown(ctx: dict[str, Any]) -> str:
+    """Plain-text fallback for hosts that don't render the MCP Apps iframe."""
+    if ctx["empty"]:
+        return f"**Crafting atlas** — no production events recorded yet ({ctx['source_base_url']})."
+    lines = [
+        f"**Crafting atlas** — {ctx['total_events']:,} events (`{ctx['source_base_url']}`)",
+        "",
+        "**Top items produced:**",
+    ]
+    for i, item in enumerate(ctx["top_items"][:10], 1):
+        lines.append(f"{i}. {item['pretty']} — {item['count']:,.0f}")
+    if ctx["top_stations"]:
+        lines.append("")
+        lines.append("**Station utilization:**")
+        for i, st in enumerate(ctx["top_stations"][:10], 1):
+            lines.append(f"{i}. {st['pretty']} — {st['count']:,} events")
+    if ctx["top_citizens"]:
+        lines.append("")
+        lines.append("**Top crafters:**")
+        for i, c in enumerate(ctx["top_citizens"][:10], 1):
+            lines.append(f"{i}. Citizen #{c['name']} — {c['count']:,.0f}")
+    if ctx["warnings"]:
+        lines.append("")
+        for w in ctx["warnings"]:
+            lines.append(f"- ⚠ {w}")
+    return "\n".join(lines)
+
+
 def _render_shell(prerendered: str | None = None) -> str:
     """Render the iframe shell — what the MCP resource returns.
 
@@ -486,6 +526,38 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             ),
             Tool(
+                name="get_eco_crafting_atlas",
+                title="Eco — crafting activity atlas",
+                description=(
+                    "Reconstruct a live picture of crafting / harvesting / "
+                    "mining activity on an Eco server from its action-log "
+                    "exporter. Aggregates top items produced, crafting-station "
+                    "utilization, and a per-citizen leaderboard across "
+                    "ItemCraftedAction, HarvestOrHunt, ChopTree, DigOrMine. "
+                    "Requires an admin API key configured server-side "
+                    "(ECO_ADMIN_API_KEY env var, populated from SSM in the "
+                    "homelab deploy). Stream-parses the CSV responses so it "
+                    "stays well under 200 MB even on late-cycle 20+ MB logs. "
+                    "Renders as an inline widget via the MCP Apps spec; falls "
+                    "back to a markdown leaderboard otherwise."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": (
+                                "Eco admin base URL (`host`, `host:port`, or "
+                                "full URL). Omit to use the configured "
+                                "default (`eco.coilysiren.me:3001`)."
+                            ),
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                **{"_meta": UI_META},
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -520,6 +592,35 @@ def build_server() -> Server:
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
+        if name == "get_eco_crafting_atlas":
+            server_arg = arguments.get("server") if arguments else None
+            api_key = os.environ.get(ADMIN_API_KEY_ENV)
+            try:
+                atlas = await fetch_atlas(base_url=server_arg, api_key=api_key)
+            except httpx.HTTPError as e:
+                err_payload = {
+                    "view": "error",
+                    "message": f"Could not reach Eco exporter: {e}",
+                }
+                return CallToolResult(
+                    content=[
+                        TextContent(type="text", text=f"**Eco exporter unreachable:** {e}"),
+                        TextContent(type="text", text=json.dumps(err_payload)),
+                        TextContent(type="text", text=HTMX_PREFIX + _render_error(str(e))),
+                    ],
+                    isError=True,
+                    **{"_meta": UI_META},
+                )
+            ctx = atlas_template_context(atlas)
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=_format_crafting_markdown(ctx)),
+                    TextContent(type="text", text=json.dumps(atlas.to_dict())),
+                    TextContent(type="text", text=HTMX_PREFIX + _render_crafting_atlas(ctx)),
+                ],
+                **{"_meta": UI_META},
+            )
+
         if name == "list_public_eco_servers":
             lines = ["**Known public Eco servers:**", ""]
             for s in KNOWN_PUBLIC_SERVERS:

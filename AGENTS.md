@@ -22,6 +22,7 @@ You have full read access to files within `/Users/kai/projects/coilysiren`.
 - Allow all readonly git actions (`git log`, `git status`, `git diff`, `git branch`, etc.) without asking.
 - Allow `cd` into any `/Users/kai/projects/coilysiren` folder without asking.
 - Automatically approve readonly shell commands (`ls`, `grep`, `sed`, `find`, `cat`, `head`, `tail`, `wc`, `file`, `tree`, etc.) without asking.
+- Allow readonly SSH diagnostics against `kai-server` (`ssh kai@kai-server 'sudo k3s-readonly-kubectl ...'`) without asking — the wrapper already blocks mutations and Secret reads. Writes (`kubectl apply/delete/patch`, direct sudo, anything that mutates cluster state) still require explicit confirmation.
 - When using worktrees or parallel agents, each agent should work independently, commit its own changes, and merge the worktree branch back into `main` automatically without asking.
 - Do not open pull requests unless explicitly asked.
 

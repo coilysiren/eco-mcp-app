@@ -34,6 +34,8 @@ packages = ["src/eco_mcp_app"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/eco_mcp_app/templates" = "eco_mcp_app/templates"
 "data/ecoregions.json" = "eco_mcp_app/data/ecoregions.json"
+"data/ecopedia.json" = "eco_mcp_app/data/ecopedia.json"
+"data/species_profiles.json" = "eco_mcp_app/data/species_profiles.json"
 
 [tool.ruff]
 line-length = 100

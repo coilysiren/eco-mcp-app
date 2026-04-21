@@ -37,6 +37,8 @@ from urllib.parse import quote
 
 import httpx
 
+from . import _preload
+
 # --- Constants -------------------------------------------------------------
 
 ECO_BASE_URL = os.environ.get("ECO_ADMIN_BASE_URL", "http://eco.coilysiren.me:3001")
@@ -475,7 +477,15 @@ async def build_species_payload(species_id: str) -> SpeciesPayload:
         payload.population_latest = samples[-1].value
         payload.population_delta = samples[-1].value - samples[0].value
 
-    # 2. iNat lookup for photo + taxonomy.
+    # 2. If this species was pre-built into the committed cache, use it and
+    #    skip the external iNat + Wikipedia calls. Population stays live
+    #    because it's per-server.
+    preloaded = _preload.get_species_profile(species_id)
+    if preloaded is not None:
+        _apply_preloaded_profile(payload, preloaded)
+        return payload
+
+    # 2b. iNat lookup for photo + taxonomy.
     taxon: dict[str, Any] | None = None
     try:
         taxon = await _fetch_inat_taxon(name)
@@ -513,6 +523,44 @@ async def build_species_payload(species_id: str) -> SpeciesPayload:
                 payload.source = "wikipedia"
 
     return payload
+
+
+def _apply_preloaded_profile(payload: SpeciesPayload, data: dict[str, Any]) -> None:
+    """Copy stable fields from a ``data/species_profiles.json`` entry onto
+    a payload that already has live population filled in.
+
+    Keys use the ``to_dict()`` casing (camelCase) so they can be diffed by
+    hand in git; fall back to snake_case for forward-compat with older
+    dumps.
+    """
+
+    def _get(*keys: str) -> Any:
+        for k in keys:
+            if k in data:
+                return data[k]
+        return None
+
+    photo_uri = _get("photoDataUri", "photo_data_uri")
+    if isinstance(photo_uri, str):
+        payload.photo_data_uri = photo_uri
+    photo_attr = _get("photoAttribution", "photo_attribution")
+    if isinstance(photo_attr, str):
+        payload.photo_attribution = photo_attr
+    wiki_extract = _get("wikiExtract", "wiki_extract")
+    if isinstance(wiki_extract, str):
+        payload.wiki_extract = wiki_extract
+    wiki_url = _get("wikiUrl", "wiki_url")
+    if isinstance(wiki_url, str):
+        payload.wiki_url = wiki_url
+    source = _get("source")
+    if isinstance(source, str) and source:
+        payload.source = source
+    taxonomy = _get("taxonomy")
+    if isinstance(taxonomy, list):
+        payload.taxonomy = [t for t in taxonomy if isinstance(t, dict)]
+    status = _get("conservationStatus", "conservation_status")
+    if isinstance(status, str):
+        payload.conservation_status = status
 
 
 _HTML_TAG = re.compile(r"<[^>]+>")

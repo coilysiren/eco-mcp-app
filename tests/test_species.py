@@ -32,6 +32,9 @@ def _isolate_cache_and_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     """Redirect the SQLite cache at a tmp dir, stub the admin key, reset rate deque."""
     monkeypatch.setenv(species_mod._CACHE_DIR_ENV, str(tmp_path))
     monkeypatch.setenv("ECO_ADMIN_API_KEY", "test-key")
+    # Bypass the committed data/species_profiles.json preload — these
+    # tests exercise the live iNat + Wikipedia fetch paths via respx.
+    monkeypatch.setenv("ECO_MCP_PRELOAD_DISABLE", "1")
     species_mod._INAT_WINDOW.clear()
 
 

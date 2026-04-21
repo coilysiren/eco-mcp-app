@@ -29,6 +29,8 @@ from typing import Any
 
 import httpx
 
+from . import _preload
+
 WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
 WIKIPEDIA_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{name}"
 
@@ -141,6 +143,27 @@ class EcopediaCard:
         d = asdict(self)
         d["facts"] = [list(p) for p in self.facts]
         return d
+
+
+def _card_from_dict(d: dict[str, Any]) -> EcopediaCard:
+    """Rehydrate an `EcopediaCard` from its ``to_dict()`` form (preload JSON)."""
+    raw_facts = d.get("facts") or []
+    facts: list[tuple[str, str]] = []
+    for pair in raw_facts:
+        if isinstance(pair, (list, tuple)) and len(pair) >= 2:
+            facts.append((str(pair[0]), str(pair[1])))
+    return EcopediaCard(
+        name=str(d.get("name") or ""),
+        category=d.get("category"),
+        title=str(d.get("title") or ""),
+        description=str(d.get("description") or ""),
+        image_data_uri=d.get("image_data_uri"),
+        image_credit=d.get("image_credit"),
+        facts=facts,
+        source=str(d.get("source") or ""),
+        source_url=d.get("source_url"),
+        not_found=bool(d.get("not_found", False)),
+    )
 
 
 def _sparql_query(name: str, category: str) -> str:
@@ -323,6 +346,10 @@ async def build_ecopedia_card(name: str, category: str | None = None) -> Ecopedi
     name = name.strip()
     if not name:
         return EcopediaCard(name="", category=category, not_found=True)
+
+    preloaded = _preload.get_ecopedia_card(name, category)
+    if preloaded is not None:
+        return _card_from_dict(preloaded)
 
     if category and category not in SUPPORTED_CATEGORIES:
         return EcopediaCard(

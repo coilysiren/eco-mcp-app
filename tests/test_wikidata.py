@@ -28,6 +28,9 @@ from eco_mcp_app.wikidata import (
 def _tmp_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     db = tmp_path / "wikidata.sqlite"
     monkeypatch.setenv("ECO_MCP_WIKIDATA_CACHE", str(db))
+    # Disable the committed data/ecopedia.json preload so these tests drive
+    # the live SPARQL + Wikipedia + SQLite-cache code paths end-to-end.
+    monkeypatch.setenv("ECO_MCP_PRELOAD_DISABLE", "1")
     yield db
 
 

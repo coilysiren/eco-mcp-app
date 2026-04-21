@@ -49,6 +49,15 @@ spec:
     spec:
       imagePullSecrets:
         - name: docker-registry
+      # Resolve eco.coilysiren.me to kai-server's LAN IP from inside the pod.
+      # Going out through the public DNS would require hairpin NAT on the
+      # home router, which it doesn't support (same limitation that forced
+      # cert-manager onto DNS-01 — see kai-server README). Hardcoded IP is
+      # fine: single-node k3s, stable home LAN, same IP cert-manager uses.
+      hostAliases:
+        - ip: "192.168.0.194"
+          hostnames:
+            - "eco.coilysiren.me"
       containers:
         - name: ${NAME}
           image: ${IMAGE}

@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import httpx
 import mcp.types as mt
@@ -82,16 +82,20 @@ def create_app() -> Starlette:
     # preview nav strip is for browser-poking, not full UX, so a sensible
     # default gets each card to render something without a 400. Tools omitted
     # from this map get an empty query string.
-    _PREVIEW_DEFAULTS = {
+    preview_defaults = {
         "get_eco_species": "?name=Bison",
         "explain_eco_item": "?name=Iron&category=material",
         "fair_price": "?item=Copper",
     }
 
+    async def _list_tools() -> mt.ListToolsResult:
+        result = await list_tools_handler(mt.ListToolsRequest(method="tools/list"))
+        return cast(mt.ListToolsResult, result.root)
+
     async def _preview_tool_links(current: str | None = None) -> list[dict[str, str]]:
-        tools_result = await list_tools_handler(mt.ListToolsRequest(method="tools/list"))
+        tools_result = await _list_tools()
         links: list[dict[str, str]] = []
-        for tool in sorted(tools_result.root.tools, key=lambda t: t.name):
+        for tool in sorted(tools_result.tools, key=lambda t: t.name):
             # Tools with no UI fragment (no `_meta.ui.resourceUri`) aren't worth
             # linking — clicking through would just show the empty iframe.
             # pydantic aliases the JSON `_meta` key to the `meta` attribute.
@@ -99,7 +103,12 @@ def create_app() -> Starlette:
             ui = (meta.get("ui") if isinstance(meta, dict) else None) or {}
             if not ui.get("resourceUri"):
                 continue
-            qs = _PREVIEW_DEFAULTS.get(tool.name, "")
+            # get_eco_server_status is already the bare /preview/ page — the
+            # top-nav "./preview" link covers it. Skipping here avoids a
+            # duplicate tools-row entry that renders the same card.
+            if tool.name == "get_eco_server_status":
+                continue
+            qs = preview_defaults.get(tool.name, "")
             links.append(
                 {
                     "label": tool.name,
@@ -110,8 +119,8 @@ def create_app() -> Starlette:
         return links
 
     async def root(_: Request) -> JSONResponse:
-        tools_result = await list_tools_handler(mt.ListToolsRequest(method="tools/list"))
-        names = sorted(t.name for t in tools_result.root.tools)
+        tools_result = await _list_tools()
+        names = sorted(t.name for t in tools_result.tools)
         return JSONResponse(
             {
                 "service": "eco-mcp-app",
@@ -136,7 +145,7 @@ def create_app() -> Starlette:
             info = redact(raw)
             info["_fetchedAtISO"] = datetime.now(UTC).isoformat()
             fragment = _render_card(to_payload(info))
-        tool_links = await _preview_tool_links(current="get_eco_server_status")
+        tool_links = await _preview_tool_links()
         return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
 
     async def preview_map(request: Request) -> HTMLResponse:
@@ -174,8 +183,9 @@ def create_app() -> Starlette:
             return HTMLResponse(
                 _render_shell(prerendered=_render_error(str(e)), preview_tools=tool_links)
             )
+        call_result = cast(mt.CallToolResult, result.root)
         fragment = ""
-        for block in result.root.content:
+        for block in call_result.content:
             text = getattr(block, "text", "") or ""
             if text.startswith(HTMX_PREFIX):
                 fragment = text[len(HTMX_PREFIX) :]

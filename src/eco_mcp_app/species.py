@@ -457,8 +457,17 @@ async def build_species_payload(species_id: str) -> SpeciesPayload:
     # 1. In-server population — cheap, try first.
     try:
         samples = await fetch_species_population(species_id)
-    except httpx.HTTPError as e:
-        payload.error = f"Could not fetch population for {species_id}: {e}"
+    except httpx.HTTPStatusError as e:
+        code = e.response.status_code
+        if code == 401:
+            payload.error = "population data unavailable (admin API key missing)"
+        elif code == 404:
+            payload.error = "no population data for this species"
+        else:
+            payload.error = f"population unavailable (HTTP {code})"
+        samples = []
+    except httpx.HTTPError:
+        payload.error = "population unavailable (network error)"
         samples = []
     payload.population = samples
     if samples:

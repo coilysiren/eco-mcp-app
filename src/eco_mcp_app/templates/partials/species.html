@@ -1,17 +1,25 @@
 {# Species profile card: iNat photo + taxonomy + live population curve. #}
-<div class="species-card">
-  <div class="species-header">
+<div class="species">
+  <div class="species-head">
     {% if photo_data_uri %}
     <img class="species-photo" src="{{ photo_data_uri }}" alt="{{ name }}" />
     {% else %}
     <div class="species-photo species-photo--missing">no photo</div>
     {% endif %}
     <div class="species-title">
-      <div class="card-label">Species</div>
-      <div class="card-val">{{ name }}</div>
-      <div class="card-sub">
+      <div class="species-label">Species</div>
+      <h2 class="species-name">{{ name }}</h2>
+      <div class="species-sub">
         <code>{{ species_id }}</code>
-        {% if source == "inat" %}· iNaturalist{% elif source == "wikipedia" %}· Wikipedia{% else %}· no external match{% endif %}
+        <span class="species-sep">·</span>
+        {% if source == "inat" %}iNaturalist
+        {% elif source == "wikipedia" %}Wikipedia
+        {% else %}no external match
+        {% endif %}
+        {% if conservation_status %}
+        <span class="species-sep">·</span>
+        <span class="species-conservation">{{ conservation_status }}</span>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -29,23 +37,21 @@
   </div>
   {% endif %}
 
-  {% if conservation_status %}
-  <div class="species-conservation">Conservation: <strong>{{ conservation_status }}</strong></div>
-  {% endif %}
-
-  <div class="species-pop">
-    <div class="card-label">Live population</div>
+  <div class="species-stat">
+    <div class="species-stat-label">Live population</div>
     {% if population %}
-    <div class="card-val">{{ population_latest }}</div>
-    <div class="card-sub">
-      day {{ '%.1f' % population[0].day }} → day {{ '%.1f' % population[-1].day }} ·
+    <div class="species-stat-val">{{ population_latest }}</div>
+    <div class="species-stat-sub">
+      day {{ '%.1f' % population[0].day }} → day {{ '%.1f' % population[-1].day }}
       {% if population_delta is not none %}
-        {% if population_delta > 0 %}+{% endif %}{{ population_delta }} from first sample
+        <span class="species-sep">·</span>
+        {% if population_delta > 0 %}+{% endif %}{{ population_delta }} since first sample
       {% endif %}
     </div>
     {{ sparkline_svg | safe }}
     {% else %}
-    <div class="card-sub">
+    <div class="species-stat-val species-stat-val--empty">—</div>
+    <div class="species-stat-sub species-stat-sub--warn">
       {% if error %}{{ error }}{% else %}no samples yet (cycle is young){% endif %}
     </div>
     {% endif %}

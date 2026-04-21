@@ -1,0 +1,88 @@
+{# Milestone ladder — renders ServerAchievementsDict as sorted progress bars.
+
+   Sorting happens server-side in build_milestones_payload (descending by
+   pct), so the template can stay dumb and iterate in order. Empty state is
+   explicit because early-cycle Eco servers routinely have zero recorded
+   achievements. #}
+<div class="shell">
+  <div class="banner-wrap">
+    <img src="{{ banner_src }}" alt="Eco banner" />
+    <div class="banner-overlay">
+      <div class="banner-title">Milestone tracker</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-label">World culture</div>
+    <div class="card-val">{{ '%.1f' % total_culture }} Culture</div>
+    <div class="card-sub">Top-line stat from <code>/info</code>. Achievements are derived.</div>
+  </div>
+
+  {% if milestones %}
+    <div class="milestones">
+      {% for m in milestones %}
+        <div class="milestone">
+          <div class="milestone-head">
+            <span class="milestone-name">{{ m.name }}</span>
+            <span class="milestone-val">
+              {%- if m.current is not none -%}
+                {{ '%g' % m.current }}
+              {%- else -%}—{%- endif %} /
+              {%- if m.target is not none %} {{ m.target }}{% else %} ?{% endif %}
+              Culture
+              <span class="milestone-pct">({{ '%.0f' % m.pct }}%)</span>
+            </span>
+          </div>
+          <div class="bar">
+            <span style="--w:{{ '%.1f' % m.pct }}%"></span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <strong>No milestones recorded yet</strong>
+      <div class="hint">
+        Achievements populate as the world generates culture. This is typical
+        on the first day or two of a cycle.
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="footer">
+    <div class="footer-meta">
+      <span>
+        Fetched {{ fetched_at }}
+        {%- if milestones %} · {{ milestones|length }} milestone{{ '' if milestones|length == 1 else 's' }}{% endif %}
+        {%- if source_url %} · <code>{{ source_url }}</code>{% endif %}
+      </span>
+      <div class="footer-actions">
+        <a class="cta steam" href="{{ steam_url }}" target="_blank" rel="noopener">Eco on Steam ↗</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .milestones { display: flex; flex-direction: column; gap: 10px; }
+  .milestone {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .milestone-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 12px; margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .milestone-name { font-weight: 600; color: var(--fg); }
+  .milestone-val { font-size: 12px; color: var(--fg-muted); }
+  .milestone-pct { color: var(--leaf-bright); margin-left: 4px; }
+  .milestone .bar {
+    height: 6px; background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px; overflow: hidden;
+  }
+  .milestone .bar > span {
+    display: block; height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--leaf) 0%, var(--leaf-bright) 100%);
+    width: var(--w, 0%); transition: width 0.9s cubic-bezier(.22,.61,.36,1);
+  }
+</style>

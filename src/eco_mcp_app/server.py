@@ -380,6 +380,118 @@ def to_payload(info: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Achievement markup strip — matches the Eco TMP-ish inline tags that show up
+# only inside ServerAchievementsDict values. Narrower than _TMP_OTHER_TAG on
+# purpose: the task spec calls for exactly these three tag families so the
+# parser stays predictable even if Eco adds new tags elsewhere. The real
+# payload ships `<style="Culture">` (attribute immediately after the tag
+# name, no whitespace), so we broaden the spec's suggested regex to allow
+# `=` or whitespace as the separator.
+_ACHIEVEMENT_MARKUP = re.compile(r"</?(style|icon|color)(?:[\s=][^>]*)?>", re.IGNORECASE)
+# Achievement sentences start with "Create 250 total culture..." — first int
+# in the first line is the target.
+_FIRST_INT = re.compile(r"\d+")
+# Current progress is a decimal inside the <style="Culture"> block, e.g.
+# "57.6 Culture". First decimal/integer in the post-strip string is the
+# current value (the target is on line 1, the current on line 2).
+_FIRST_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def parse_achievement(name: str, raw: str) -> dict[str, Any]:
+    """Parse a single ServerAchievementsDict entry into a progress row.
+
+    Returns a dict with `name`, `current`, `target`, `pct`, and `stripped`
+    (the human-readable text with Eco's inline markup removed). Resilient to
+    missing values — if either number is absent we return ``None`` for it and
+    a ``pct`` of 0.0 so the caller can still render an empty-ish bar.
+    """
+    stripped = _ACHIEVEMENT_MARKUP.sub("", raw or "").strip()
+    # The first line carries the target ("Create 250 total culture...").
+    lines = stripped.splitlines()
+    first_line = lines[0] if lines else stripped
+    target_match = _FIRST_INT.search(first_line)
+    target = int(target_match.group()) if target_match else None
+    # The current value is the first number *after* the first line. Falling
+    # back to the whole string means a single-line value still works.
+    rest = "\n".join(lines[1:]) if len(lines) > 1 else ""
+    current_match = _FIRST_NUMBER.search(rest) or (
+        _FIRST_NUMBER.search(stripped[target_match.end() :]) if target_match else None
+    )
+    current: float | None
+    if current_match:
+        try:
+            current = float(current_match.group())
+        except ValueError:
+            current = None
+    else:
+        current = None
+    if target and current is not None:
+        pct = max(0.0, min(100.0, current / target * 100.0))
+    else:
+        pct = 0.0
+    return {
+        "name": name.strip(),
+        "current": current,
+        "target": target,
+        "pct": pct,
+        "stripped": stripped,
+    }
+
+
+def build_milestones_payload(info: dict[str, Any]) -> dict[str, Any]:
+    """Shape the payload consumed by the milestone card template.
+
+    Sorted by completion % descending (closest to target at top), matching the
+    acceptance criterion in todo/04-milestone-tracker.md.
+    """
+    raw_dict = info.get("ServerAchievementsDict") or {}
+    rows = [parse_achievement(name, value) for name, value in raw_dict.items()]
+    rows.sort(key=lambda r: r["pct"], reverse=True)
+    return {
+        "view": "eco_milestones",
+        "fetchedAtISO": info.get("_fetchedAtISO"),
+        "sourceUrl": info.get("_sourceUrl"),
+        "totalCulture": float(info.get("TotalCulture") or 0.0),
+        "milestones": rows,
+    }
+
+
+def _render_milestones(payload: dict[str, Any]) -> str:
+    """Render the milestone card fragment via Jinja2."""
+    fetched_at = "—"
+    if payload.get("fetchedAtISO"):
+        try:
+            fetched_at = (
+                datetime.fromisoformat(payload["fetchedAtISO"]).astimezone().strftime("%H:%M:%S")
+            )
+        except ValueError:
+            fetched_at = payload["fetchedAtISO"]
+    ctx = {
+        "total_culture": payload["totalCulture"],
+        "milestones": payload["milestones"],
+        "fetched_at": fetched_at,
+        "source_url": payload.get("sourceUrl"),
+        "steam_url": STEAM_URL,
+        "banner_src": _BANNER_SRC,
+    }
+    return _JINJA.get_template("partials/milestones.html").render(**ctx)
+
+
+def _format_milestones_markdown(payload: dict[str, Any]) -> str:
+    lines = [
+        f"**Eco milestones** — TotalCulture: **{payload['totalCulture']:.1f}**",
+        "",
+    ]
+    if not payload["milestones"]:
+        lines.append("_No achievements recorded yet — it may be very early in the cycle._")
+        return "\n".join(lines)
+    for row in payload["milestones"]:
+        current = "—" if row["current"] is None else f"{row['current']:g}"
+        target = "?" if row["target"] is None else str(row["target"])
+        lines.append(f"- **{row['name']}**: {current} / {target} Culture ({row['pct']:.0f}%)")
+    return "\n".join(lines)
+
+
 def _render_card(payload: dict[str, Any]) -> str:
     """Render the full card HTML fragment via Jinja2."""
     server = payload["server"]
@@ -1016,6 +1128,35 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             ),
             Tool(
+                name="get_eco_milestones",
+                title="Eco — milestone tracker",
+                description=(
+                    "Show progress toward each server-wide culture achievement on "
+                    "a public Eco game server. Parses the `ServerAchievementsDict` "
+                    "field of `/info`, strips the inline Eco markup, and renders a "
+                    "ladder of progress bars sorted by completion percentage "
+                    "descending. Also surfaces the top-level `TotalCulture` stat. "
+                    "Accepts the same `server` argument shape as "
+                    "`get_eco_server_status`. Renders as a visual widget in "
+                    "Claude Desktop via the MCP Apps spec."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": (
+                                "Eco server to query. Accepts a bare host or IP, "
+                                "host:port, or a full `/info` URL. Omit to use the "
+                                "server configured via ECO_INFO_URL."
+                            ),
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                **{"_meta": UI_META},
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -1130,7 +1271,7 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             )
 
-        if name != "get_eco_server_status":
+        if name not in ("get_eco_server_status", "get_eco_milestones"):
             raise ValueError(f"Unknown tool: {name}")
 
         server_arg = arguments.get("server") if arguments else None
@@ -1150,6 +1291,21 @@ def build_server() -> Server:
 
         info = redact(raw)
         info["_fetchedAtISO"] = datetime.now(UTC).isoformat()
+
+        if name == "get_eco_milestones":
+            milestones_payload = build_milestones_payload(info)
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=_format_milestones_markdown(milestones_payload)),
+                    TextContent(type="text", text=json.dumps(milestones_payload)),
+                    TextContent(
+                        type="text",
+                        text=HTMX_PREFIX + _render_milestones(milestones_payload),
+                    ),
+                ],
+                **{"_meta": UI_META},
+            )
+
         payload = to_payload(info)
         return CallToolResult(
             content=[

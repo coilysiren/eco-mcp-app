@@ -1003,19 +1003,15 @@ def _render_ecoregion_card(payload: dict[str, Any]) -> str:
     """Render the biodiversity + ecoregion card fragment."""
     biomes = payload.get("biomes") or []
     raw_sum = float(payload.get("rawSumPercent") or 0.0)
-    # Build donut slices. stroke-dasharray draws a length, skips the rest of
-    # the circumference. offset positions each arc so consecutive slices
-    # don't overlap. dashoffset is subtracted (negative moves clockwise).
+    # Donut shows normalized share (slices sum to 100% of classified area).
+    # The classified-vs-transitional split lives in the hint line below.
     slices: list[dict[str, Any]] = []
     cursor_pct = 0.0
     for b in biomes:
-        pct = float(b.get("percent") or 0.0)
-        if pct <= 0:
+        share = float(b.get("sharePercent") or 0.0)
+        if share <= 0:
             continue
-        # "as a fraction of 100" — we draw percent-of-world, so the donut is
-        # only partly filled when biomes don't sum to 100. That's intentional
-        # and the hint text calls it out.
-        length = _DONUT_CIRCUMFERENCE * (pct / 100.0)
+        length = _DONUT_CIRCUMFERENCE * (share / 100.0)
         slices.append(
             {
                 "color": b.get("color"),
@@ -1024,12 +1020,13 @@ def _render_ecoregion_card(payload: dict[str, Any]) -> str:
                 "offset": -_DONUT_CIRCUMFERENCE * (cursor_pct / 100.0),
             }
         )
-        cursor_pct += pct
+        cursor_pct += share
     ctx = {
         "biomes": biomes,
-        "biomes_have_data": any(float(b.get("percent") or 0.0) > 0 for b in biomes),
+        "biomes_have_data": any(float(b.get("sharePercent") or 0.0) > 0 for b in biomes),
         "donut_slices": slices,
         "raw_sum_percent": raw_sum,
+        "classified_percent": float(payload.get("classifiedPercent") or raw_sum),
         "unclassified_percent": float(payload.get("unclassifiedPercent") or 0.0),
         "ecoregion_matches": payload.get("ecoregionMatches") or [],
         "drift_boom": (payload.get("drift") or {}).get("boom") or [],

@@ -31,6 +31,27 @@ spec:
       remoteRef:
         key: /github/pat
 ---
+# Eco server APIAdminAuthToken, synced from AWS SSM so the pod can hit the
+# admin-only /api/v1/exporter/* routes used by `get_eco_ecoregion` for
+# species drift. Without this the drift strip renders its empty state.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: eco-admin-token
+  namespace: ${NAME}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-parameter-store
+    kind: ClusterSecretStore
+  target:
+    name: eco-admin-token
+    creationPolicy: Owner
+  data:
+    - secretKey: token
+      remoteRef:
+        key: /eco-mcp-app/api-admin-token
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -71,6 +92,11 @@ spec:
           env:
             - name: PORT
               value: "80"
+            - name: ECO_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: eco-admin-token
+                  key: token
           ports:
             - containerPort: 80
           readinessProbe:

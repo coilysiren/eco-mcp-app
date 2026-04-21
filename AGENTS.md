@@ -1,3 +1,13 @@
+## Deploy reference
+
+Before touching any deploy config (Dockerfile, Makefile, `deploy/main.yml`,
+`.github/workflows/build-and-publish.yml`, or the Tailscale/k3s secrets),
+read
+[`coilysiren/infrastructure/docs/k3s-deploy-notes.md`](../infrastructure/docs/k3s-deploy-notes.md).
+That doc captures the four-repo accumulated knowledge of the homelab
+deploy rig. When you resolve a new pitfall, add it there — don't scatter
+fixes across each repo's notes.
+
 ## File Access
 
 You have full read access to files within `/Users/kai/projects/coilysiren`.

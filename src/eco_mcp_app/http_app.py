@@ -94,7 +94,8 @@ def create_app() -> Starlette:
         for tool in sorted(tools_result.root.tools, key=lambda t: t.name):
             # Tools with no UI fragment (no `_meta.ui.resourceUri`) aren't worth
             # linking — clicking through would just show the empty iframe.
-            meta = getattr(tool, "_meta", None) or {}
+            # pydantic aliases the JSON `_meta` key to the `meta` attribute.
+            meta = getattr(tool, "meta", None) or {}
             ui = (meta.get("ui") if isinstance(meta, dict) else None) or {}
             if not ui.get("resourceUri"):
                 continue

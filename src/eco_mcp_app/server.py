@@ -1987,7 +1987,7 @@ def build_server() -> Server:
 
         if name == "get_eco_crafting_atlas":
             server_arg = arguments.get("server") if arguments else None
-            api_key = os.environ.get(ADMIN_API_KEY_ENV)
+            api_key = os.environ.get(ADMIN_API_KEY_ENV) or _get_admin_token()
             try:
                 atlas = await fetch_atlas(base_url=server_arg, api_key=api_key)
             except httpx.HTTPError as e:

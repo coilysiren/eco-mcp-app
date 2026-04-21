@@ -110,6 +110,35 @@ def test_strip_law_markup_removes_all_four_families() -> None:
     assert "icon body" in out
 
 
+def test_strip_law_markup_strips_all_live_day3_tags() -> None:
+    # Every tag family observed on the live Day-3 server law descriptions.
+    src = (
+        '<style="Header">Header</style>'
+        "<color=#FFFFFFFF>colored</color>"
+        '<link="view:283:-1">link body</link>'
+        '<icon name="Claim" type="">icon body</icon>'
+        "<i>italic</i><u>underline</u>"
+        "<linktext>linktext body</linktext>"
+        "<foldout>foldout body</foldout>"
+        "<title>title body</title>"
+    )
+    out = strip_law_markup(src)
+    assert "<" not in out, out
+    assert ">" not in out, out
+    for body in (
+        "Header",
+        "colored",
+        "link body",
+        "icon body",
+        "italic",
+        "underline",
+        "linktext body",
+        "foldout body",
+        "title body",
+    ):
+        assert body in out, f"{body!r} missing from {out!r}"
+
+
 def test_strip_law_markup_handles_none_and_empty() -> None:
     assert strip_law_markup(None) == ""
     assert strip_law_markup("") == ""

@@ -339,16 +339,18 @@ async def fetch_eco_info(server: str | None = None) -> dict[str, Any]:
 #
 # Eco law descriptions are authored in TextMeshPro rich-text markup, but the
 # government panel doesn't try to color or style them — we just want a plain
-# human-readable preview for the footer. This regex strips the four tag
-# families we see in practice (`<link=...>`, `<icon ...>`, `<color=...>`,
-# `<style=...>`) and leaves surrounding text intact. See
+# human-readable preview for the footer. This regex strips the tag families
+# we see in practice on the live server (`<link=...>`, `<icon ...>`,
+# `<color=...>`, `<style=...>`, plus bare `<i>`, `<u>`, `<linktext>`,
+# `<foldout>`, `<title>`) and leaves surrounding text intact. See
 # `format_eco_markup` for the richer renderer used by the /info card title.
-# The spec suggests `</?(link|icon|color|style)(\s[^>]*)?>` but actual Eco
-# output uses `<style="Header">` / `<color=#FFF>` with no whitespace before
-# the attribute, so broaden the post-name character class to `[\s=]` to
-# catch the common inline-attribute forms while still terminating cleanly
-# on a closing `>`.
-_LAW_MARKUP = re.compile(r"</?(link|icon|color|style)([\s=][^>]*)?>", re.IGNORECASE)
+# The post-name character class is `[\s=]` because Eco emits attribute forms
+# like `<style="Header">` / `<color=#FFF>` with no whitespace before the `=`.
+_LAW_MARKUP = re.compile(
+    r"</?(?:link|icon|color|style|b|i|u|s|size|sprite|mark|lowercase|uppercase"
+    r"|smallcaps|linktext|foldout|title)(?:[\s=][^>]*)?/?>",
+    re.IGNORECASE,
+)
 
 
 def strip_law_markup(s: str | None) -> str:

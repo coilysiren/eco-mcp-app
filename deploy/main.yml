@@ -52,9 +52,12 @@ spec:
       remoteRef:
         key: /eco-mcp-app/fred-api-key
 ---
-# Eco server APIAdminAuthToken, synced from AWS SSM so the pod can hit the
-# admin-only /api/v1/exporter/* routes used by `get_eco_ecoregion` for
-# species drift. Without this the drift strip renders its empty state.
+# Eco admin API token — needed by get_eco_economy (/datasets/get) and
+# get_eco_ecoregion (/exporter/* for species drift). The pod has no AWS
+# credentials, so the boto3 SSM fallback in _load_admin_token() silently
+# fails and those cards render their empty states. Sync the SSM param
+# into a K8s Secret and mount it as ECO_ADMIN_TOKEN — same pattern as
+# /github/pat above.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:

@@ -1,58 +1,77 @@
 {# Rendered output of `explain_eco_item` — one card summarizing a Wikidata /
-   Wikipedia entity. Minimal styling; leans on eco.css tokens for colors. #}
-<div class="ecopedia">
-  <div class="ecopedia-header">
-    <div class="ecopedia-title">
-      <div class="label">Ecopedia</div>
-      <h2 class="ecopedia-name">{{ card.title or card.name }}</h2>
-      {% if card.category %}
-        <div class="ecopedia-category">{{ card.category }}</div>
-      {% endif %}
+   Wikipedia entity. Styled after a Wikipedia article: serif page title with
+   bottom rule, right-floated infobox, sans-serif body prose. #}
+<article class="ecopedia">
+  <header class="ecopedia-header">
+    <h1 class="ecopedia-name">{{ card.title or card.name }}</h1>
+    <div class="ecopedia-subtitle">
+      From Ecopedia, the Eco encyclopedia{% if card.category %} —
+      <span class="ecopedia-category">{{ card.category }}</span>{% endif %}
     </div>
-    {% if card.image_data_uri %}
-      <img
-        class="ecopedia-image"
-        src="{{ card.image_data_uri }}"
-        alt="{{ card.title or card.name }}"
-      />
-    {% endif %}
-  </div>
+  </header>
 
   {% if card.not_found and not card.description %}
-    <div class="empty">
-      <strong style="color:var(--warn)">No entry for "{{ card.name }}"</strong>
+    <div class="ecopedia-empty">
+      <strong>No entry for &ldquo;{{ card.name }}&rdquo;</strong>
       <div class="hint">
         Nothing on Wikipedia or Wikidata matched. Try a more specific name or
         pass <code>category</code> (material, plant, animal, mineral, food).
       </div>
     </div>
   {% else %}
+    {% if card.image_data_uri or card.facts %}
+      <aside class="ecopedia-infobox">
+        <div class="ecopedia-infobox-title">{{ card.title or card.name }}</div>
+        {% if card.image_data_uri %}
+          <div class="ecopedia-infobox-image-wrap">
+            <img
+              class="ecopedia-infobox-image"
+              src="{{ card.image_data_uri }}"
+              alt="{{ card.title or card.name }}"
+            />
+          </div>
+        {% endif %}
+        {% if card.facts %}
+          <table class="ecopedia-infobox-facts">
+            <tbody>
+              {% for label, value in card.facts %}
+                <tr>
+                  <th>{{ label }}</th>
+                  <td>{{ value }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      </aside>
+    {% endif %}
+
     {% if card.description %}
-      <p class="ecopedia-description">{{ card.description }}</p>
+      {% set _title = card.title or card.name %}
+      {% if card.description.lower().startswith(_title.lower()) %}
+        <p class="ecopedia-description">
+          <b>{{ card.description[:_title|length] }}</b>{{ card.description[_title|length:] }}
+        </p>
+      {% else %}
+        <p class="ecopedia-description">
+          <b>{{ _title }}</b> {{ card.description }}
+        </p>
+      {% endif %}
     {% else %}
       <p class="ecopedia-description hint">
-        No description available — Wikidata entry found, but its English
+        No description available &mdash; Wikidata entry found, but its English
         description is empty.
       </p>
     {% endif %}
 
-    {% if card.facts %}
-      <table class="ecopedia-facts">
-        <tbody>
-          {% for label, value in card.facts %}
-            <tr>
-              <th>{{ label }}</th>
-              <td>{{ value }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <div class="hint">No structured facts available for this item.</div>
+    {% if not card.facts %}
+      <p class="ecopedia-description hint">
+        No structured facts available for this item.
+      </p>
     {% endif %}
   {% endif %}
 
-  <div class="ecopedia-footer">
+  <footer class="ecopedia-footer">
     {% if card.source_url %}
       <a href="{{ card.source_url }}" target="_blank" rel="noreferrer">
         Source: {{ card.source or "external" }}
@@ -60,5 +79,5 @@
     {% elif card.source %}
       <span class="hint">Source: {{ card.source }}</span>
     {% endif %}
-  </div>
-</div>
+  </footer>
+</article>

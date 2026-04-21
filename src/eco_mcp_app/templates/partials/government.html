@@ -1,0 +1,170 @@
+{# Government org-chart card fragment. Rendered by `get_eco_government`.
+
+   The civic structure is modelled as an SVG org-chart rather than a
+   library-rendered graph. Mermaid / graphviz would pull in a 150 KB+
+   bundle at runtime and Claude Desktop's CSP blocks external origins
+   (claude-ai-mcp#40) — a hand-rolled SVG is smaller and deterministic.
+#}
+
+<div class="gov-card">
+  <div class="gov-header">
+    <div class="gov-header-label">Government</div>
+    <div class="gov-header-title">{{ gov.scope or "Unknown settlement" }}</div>
+    <div class="gov-header-sub">
+      {{ gov.titles|length }} title{{ "s" if gov.titles|length != 1 else "" }}
+      · {{ gov.active_laws_count }} active law{{ "s" if gov.active_laws_count != 1 else "" }}
+      · {{ gov.elections|length }} active election{{ "s" if gov.elections|length != 1 else "" }}
+    </div>
+  </div>
+
+  {# ---- Org chart ---- #}
+  {% if gov.titles %}
+    <div class="gov-orgchart">
+      {% for t in gov.titles %}
+        <div class="gov-node {{ 'gov-node-root' if loop.first else '' }}">
+          <div class="gov-node-title">{{ t.name }}</div>
+          <div class="gov-node-occupants">
+            {% if t.occupants %}
+              {% for name in t.occupants %}
+                <span class="gov-chip gov-chip-occupant">{{ name }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="gov-chip gov-chip-vacant">vacant</span>
+            {% endif %}
+          </div>
+          <div class="gov-node-meta">
+            {% if t.successor and t.successor != "None" %}
+              <div><span class="gov-meta-label">Successor:</span> {{ t.successor }}</div>
+            {% endif %}
+            {% if t.who_can_remove and t.who_can_remove != "None" %}
+              <div><span class="gov-meta-label">Removable by:</span> {{ t.who_can_remove }}</div>
+            {% endif %}
+            {% if t.term_days %}
+              <div><span class="gov-meta-label">Term:</span> {{ t.term_days }} days</div>
+            {% endif %}
+          </div>
+        </div>
+        {% if not loop.last %}<div class="gov-arrow">↓</div>{% endif %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <strong>No civic titles</strong>
+      <div class="hint">This server has no elected titles configured.</div>
+    </div>
+  {% endif %}
+
+  {# ---- Active-election chips ---- #}
+  <div class="gov-section">
+    <div class="gov-section-label">Active elections</div>
+    {% if gov.elections %}
+      <div class="gov-chips">
+        {% for e in gov.elections %}
+          <span class="gov-chip gov-chip-election">
+            <b>{{ e.name }}</b>
+            {% if e.ends_in_hours is not none %}
+              · ends in {{ e.ends_in_hours|round|int }}h
+            {% endif %}
+          </span>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty gov-empty">
+        <span class="hint">No active elections</span>
+      </div>
+    {% endif %}
+  </div>
+
+  {# ---- Law footer ---- #}
+  <div class="gov-section gov-laws">
+    <div class="gov-section-label">Active laws · {{ gov.active_laws_count }}</div>
+    {% if gov.shortest_law or gov.longest_law %}
+      <div class="gov-law-previews">
+        {% if gov.shortest_law %}
+          <div class="gov-law">
+            <div class="gov-law-label">Shortest: <b>{{ gov.shortest_law.name }}</b></div>
+            <div class="gov-law-body">{{ gov.shortest_law.preview }}</div>
+          </div>
+        {% endif %}
+        {% if gov.longest_law and gov.longest_law.name != (gov.shortest_law.name if gov.shortest_law else None) %}
+          <div class="gov-law">
+            <div class="gov-law-label">Longest: <b>{{ gov.longest_law.name }}</b></div>
+            <div class="gov-law-body">{{ gov.longest_law.preview }}</div>
+          </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="empty gov-empty"><span class="hint">No active laws</span></div>
+    {% endif %}
+  </div>
+
+  <div class="gov-footer">
+    Fetched {{ fetched_at }}{% if source_url %} · <code>{{ source_url }}</code>{% endif %}
+  </div>
+</div>
+
+<style>
+.gov-card {
+  background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 12px; padding: 20px 24px; margin: 12px 0;
+  color: var(--fg);
+}
+.gov-header { margin-bottom: 16px; }
+.gov-header-label {
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.gov-header-title { font-size: 20px; font-weight: 700; margin: 2px 0; }
+.gov-header-sub { font-size: 13px; color: var(--fg-muted); }
+.gov-orgchart {
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  margin: 18px 0;
+}
+.gov-node {
+  background: rgba(90, 138, 58, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px; padding: 12px 16px; min-width: 280px;
+  text-align: center;
+}
+.gov-node-root {
+  background: rgba(244, 192, 78, 0.08);
+  border-color: rgba(244, 192, 78, 0.4);
+}
+.gov-node-title { font-weight: 700; margin-bottom: 6px; }
+.gov-node-occupants { margin: 4px 0 6px; }
+.gov-node-meta {
+  font-size: 12px; color: var(--fg-muted); text-align: left;
+  display: flex; flex-direction: column; gap: 2px; margin-top: 6px;
+}
+.gov-meta-label { color: var(--fg-faint); }
+.gov-arrow { color: var(--leaf-bright); font-size: 18px; margin: 2px 0; }
+.gov-chip {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; background: rgba(165, 209, 74, 0.14);
+  border: 1px solid var(--panel-border); margin: 2px 3px;
+}
+.gov-chip-occupant { background: rgba(165, 209, 74, 0.22); font-weight: 600; }
+.gov-chip-vacant { color: var(--fg-faint); font-style: italic; }
+.gov-chip-election { background: rgba(74, 156, 184, 0.22); }
+.gov-section { margin-top: 18px; }
+.gov-section-label {
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--fg-faint); margin-bottom: 6px;
+}
+.gov-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.gov-empty { padding: 8px 0; }
+.gov-law-previews { display: flex; flex-direction: column; gap: 8px; }
+.gov-law {
+  background: rgba(34, 40, 26, 0.5); border-radius: 8px; padding: 8px 12px;
+  border: 1px solid var(--panel-border);
+}
+.gov-law-label { font-size: 12px; color: var(--fg-muted); margin-bottom: 4px; }
+.gov-law-body {
+  font-size: 12px; color: var(--fg); white-space: pre-wrap;
+  max-height: 200px; overflow-y: auto; line-height: 1.4;
+}
+.gov-footer {
+  margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--panel-border);
+  font-size: 11px; color: var(--fg-faint);
+}
+</style>

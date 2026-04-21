@@ -37,6 +37,10 @@ from pydantic import AnyUrl
 
 DEFAULT_ECO_INFO_URL = os.environ.get("ECO_INFO_URL", "http://eco.coilysiren.me:3001/info")
 DEFAULT_ECO_PORT = int(os.environ.get("ECO_INFO_PORT", "3001"))
+# Base URL for non-/info endpoints on the same server. Derived from
+# DEFAULT_ECO_INFO_URL at import time so overriding ECO_INFO_URL in tests or
+# deploys redirects every endpoint consistently.
+DEFAULT_ECO_BASE_URL = DEFAULT_ECO_INFO_URL.rsplit("/info", 1)[0]
 STEAM_URL = "https://store.steampowered.com/app/382310/Eco/"
 RESOURCE_URI = "ui://eco/status.html"
 RESOURCE_MIME = "text/html;profile=mcp-app"
@@ -296,6 +300,244 @@ async def fetch_eco_info(server: str | None = None) -> dict[str, Any]:
         return data
 
 
+# ---------------------------------------------------------------------------
+# Government org-chart tool
+# ---------------------------------------------------------------------------
+#
+# Eco law descriptions are authored in TextMeshPro rich-text markup, but the
+# government panel doesn't try to color or style them — we just want a plain
+# human-readable preview for the footer. This regex strips the four tag
+# families we see in practice (`<link=...>`, `<icon ...>`, `<color=...>`,
+# `<style=...>`) and leaves surrounding text intact. See
+# `format_eco_markup` for the richer renderer used by the /info card title.
+# The spec suggests `</?(link|icon|color|style)(\s[^>]*)?>` but actual Eco
+# output uses `<style="Header">` / `<color=#FFF>` with no whitespace before
+# the attribute, so broaden the post-name character class to `[\s=]` to
+# catch the common inline-attribute forms while still terminating cleanly
+# on a closing `>`.
+_LAW_MARKUP = re.compile(r"</?(link|icon|color|style)([\s=][^>]*)?>", re.IGNORECASE)
+
+
+def strip_law_markup(s: str | None) -> str:
+    """Remove Eco rich-text tags from a law description."""
+    if not s:
+        return ""
+    return _LAW_MARKUP.sub("", s).strip()
+
+
+# Labels inside each title's Table rows that we care about. Keys are the
+# normalized attribute name we expose; values are the exact `Property` labels
+# the Eco API emits. These are verified live against
+# `/api/v1/elections/titles` on Day 3 of Cycle 13; if upstream relabels them
+# we'll start rendering "None" and that's fine — the layout still holds.
+_TITLE_ROW_KEYS = {
+    "election_process": "Election Process",
+    "eligible_candidates": "Eligible Candidates",
+    "successor": "Successor",
+    "who_can_remove": "Who Can Remove From Office",
+    "term_days": "Term Limit Days",
+}
+
+
+def _build_eco_url(base: str | None, path: str) -> str:
+    """Compose an endpoint URL from a user-supplied server (or the default)."""
+    if not base:
+        return f"{DEFAULT_ECO_BASE_URL}{path}"
+    normalized = normalize_server_url(base)
+    # normalize_server_url always appends `/info` (or whatever path the user
+    # supplied). Strip any path off — we want just scheme + host:port.
+    parsed = urlparse(normalized)
+    return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+
+
+async def _get_json(client: httpx.AsyncClient, url: str) -> Any:
+    r = await client.get(url)
+    r.raise_for_status()
+    return r.json()
+
+
+async def fetch_eco_government(server: str | None = None) -> dict[str, Any]:
+    """Hit the three civic endpoints in parallel and return raw JSON.
+
+    Returns a dict with keys `titles`, `elections`, `laws`, each the parsed
+    JSON body. `elections` may be `[]` (verified empty on Day 3 of the
+    current cycle) and callers must handle that. Raises on the first
+    non-200 / connect error encountered.
+    """
+    titles_url = _build_eco_url(server, "/api/v1/elections/titles")
+    elections_url = _build_eco_url(server, "/api/v1/elections")
+    laws_url = _build_eco_url(server, "/api/v1/laws?byStates=Active")
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        titles = await _get_json(client, titles_url)
+        elections = await _get_json(client, elections_url)
+        laws = await _get_json(client, laws_url)
+    return {
+        "titles": titles,
+        "elections": elections,
+        "laws": laws,
+        "_sourceUrl": titles_url,
+    }
+
+
+def _row_value(table: list[list[str]], label: str) -> str | None:
+    """Pull the value cell from a `[property, description, value]` row."""
+    for row in table:
+        if row and len(row) >= 3 and row[0] == label:
+            return row[2]
+    return None
+
+
+def _extract_scope(titles: list[dict[str, Any]]) -> str:
+    """Derive the settlement/federation name from title scopes.
+
+    Title names are shaped like `"<Scope> Mayor"` / `"<Scope> Governor"` /
+    `"<Scope> Sheriff"`. We take the first title and strip the trailing role
+    word. Returns `"Unknown settlement"` if we can't parse it — callers
+    render that string directly in the header.
+    """
+    if not titles:
+        return "Unknown settlement"
+    first = titles[0].get("Name", "") or ""
+    # Strip the last token (role word) — "Foo Bar Mayor" → "Foo Bar".
+    parts = first.rsplit(" ", 1)
+    if len(parts) == 2 and parts[1]:
+        return parts[0]
+    return first or "Unknown settlement"
+
+
+def to_government_payload(
+    data: dict[str, Any],
+    *,
+    fetched_at_iso: str | None = None,
+) -> dict[str, Any]:
+    """Shape the raw endpoint blob into the view dict the template consumes."""
+    titles_raw: list[dict[str, Any]] = data.get("titles") or []
+    elections_raw: list[dict[str, Any]] = data.get("elections") or []
+    laws_raw: list[dict[str, Any]] = data.get("laws") or []
+
+    titles: list[dict[str, Any]] = []
+    for t in titles_raw:
+        table = t.get("Table") or []
+        titles.append(
+            {
+                "id": t.get("Id"),
+                "name": t.get("Name") or "?",
+                "state": t.get("State"),
+                "occupants": list(t.get("OccupantNames") or []),
+                "successor": _row_value(table, _TITLE_ROW_KEYS["successor"]),
+                "who_can_remove": _row_value(table, _TITLE_ROW_KEYS["who_can_remove"]),
+                "term_days": _row_value(table, _TITLE_ROW_KEYS["term_days"]),
+                "eligible_candidates": _row_value(table, _TITLE_ROW_KEYS["eligible_candidates"]),
+            }
+        )
+
+    # Elections — server claims to filter `byStates=Active` on laws but
+    # doesn't always honour the filter. We don't pass a filter for elections
+    # (endpoint accepts no args) — just defensively keep only ones that look
+    # open. `EndTime` / `TimeLeft` field naming drifts across Eco versions,
+    # so we check a few likely shapes.
+    elections: list[dict[str, Any]] = []
+    for e in elections_raw:
+        ends_in_hours: float | None = None
+        if isinstance(e.get("TimeLeft"), int | float):
+            ends_in_hours = float(e["TimeLeft"]) / 3600.0
+        elif isinstance(e.get("HoursLeft"), int | float):
+            ends_in_hours = float(e["HoursLeft"])
+        elections.append(
+            {
+                "id": e.get("Id"),
+                "name": e.get("Name") or e.get("TitleName") or "Election",
+                "ends_in_hours": ends_in_hours,
+                "state": e.get("State"),
+            }
+        )
+
+    # Client-side filter: the `byStates=Active` query param is advisory —
+    # verified upstream returns mixed states anyway.
+    active_laws = [law for law in laws_raw if (law.get("State") or "") == "Active"]
+    active_laws_count = len(active_laws)
+
+    cleaned_laws = [
+        {
+            "name": law.get("Name") or "?",
+            "clean": strip_law_markup(law.get("Description") or ""),
+        }
+        for law in active_laws
+    ]
+    cleaned_laws = [law for law in cleaned_laws if law["clean"]]
+
+    shortest_law: dict[str, Any] | None = None
+    longest_law: dict[str, Any] | None = None
+    if cleaned_laws:
+        shortest = min(cleaned_laws, key=lambda law: len(law["clean"]))
+        longest = max(cleaned_laws, key=lambda law: len(law["clean"]))
+        shortest_law = {"name": shortest["name"], "preview": _law_preview(shortest["clean"])}
+        longest_law = {"name": longest["name"], "preview": _law_preview(longest["clean"])}
+
+    return {
+        "view": "eco_government",
+        "fetchedAtISO": fetched_at_iso,
+        "sourceUrl": data.get("_sourceUrl"),
+        "scope": _extract_scope(titles_raw),
+        "titles": titles,
+        "elections": elections,
+        "active_laws_count": active_laws_count,
+        "shortest_law": shortest_law,
+        "longest_law": longest_law,
+    }
+
+
+def _law_preview(text: str, max_chars: int = 600) -> str:
+    """Trim a sanitized law body to a reasonable preview length."""
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "…"
+
+
+def _render_government_card(payload: dict[str, Any]) -> str:
+    fetched_at = "—"
+    if payload.get("fetchedAtISO"):
+        try:
+            fetched_at = (
+                datetime.fromisoformat(payload["fetchedAtISO"]).astimezone().strftime("%H:%M:%S")
+            )
+        except ValueError:
+            fetched_at = payload["fetchedAtISO"]
+    return _JINJA.get_template("partials/government.html").render(
+        gov=payload,
+        fetched_at=fetched_at,
+        source_url=payload.get("sourceUrl"),
+    )
+
+
+def _format_government_markdown(payload: dict[str, Any]) -> str:
+    lines = [f"**{payload['scope']} — Government**", ""]
+    if payload["titles"]:
+        for t in payload["titles"]:
+            occs = ", ".join(t["occupants"]) if t["occupants"] else "_vacant_"
+            lines.append(f"- **{t['name']}** — {occs}")
+    else:
+        lines.append("- No civic titles configured")
+    lines.append("")
+    if payload["elections"]:
+        lines.append("**Active elections:**")
+        for e in payload["elections"]:
+            if e["ends_in_hours"] is not None:
+                lines.append(f"- {e['name']} — ends in {round(e['ends_in_hours'])}h")
+            else:
+                lines.append(f"- {e['name']}")
+    else:
+        lines.append("_No active elections._")
+    lines.append("")
+    lines.append(f"Active laws: **{payload['active_laws_count']}**")
+    if payload.get("shortest_law"):
+        lines.append(f"- shortest: {payload['shortest_law']['name']}")
+    if payload.get("longest_law"):
+        lines.append(f"- longest: {payload['longest_law']['name']}")
+    return "\n".join(lines)
+
+
 def redact(info: dict[str, Any]) -> dict[str, Any]:
     """Strip player names. Counts are fine — individual identities are not."""
     out = dict(info)
@@ -486,6 +728,34 @@ def build_server() -> Server:
                 **{"_meta": UI_META},
             ),
             Tool(
+                name="get_eco_government",
+                title="Eco — government org-chart",
+                description=(
+                    "Show the civic structure of an Eco server: elected titles "
+                    "with occupants, active elections with countdown chips, and "
+                    "a count + preview of active laws with Eco markup stripped. "
+                    "Handles empty states gracefully (early-cycle servers often "
+                    "have no active elections). Defaults to the server "
+                    "configured via ECO_INFO_URL; pass `server` to target "
+                    "another Eco server by host, host:port, or URL."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "server": {
+                            "type": "string",
+                            "description": (
+                                "Eco server to query. Accepts a bare host, "
+                                "host:port, or full URL. Omit to use "
+                                "ECO_INFO_URL."
+                            ),
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                **{"_meta": UI_META},
+            ),
+            Tool(
                 name="list_public_eco_servers",
                 title="Eco — list public servers",
                 description=(
@@ -532,6 +802,36 @@ def build_server() -> Server:
                         text=json.dumps({"servers": KNOWN_PUBLIC_SERVERS}),
                     ),
                 ],
+            )
+
+        if name == "get_eco_government":
+            server_arg = arguments.get("server") if arguments else None
+            try:
+                raw_gov = await fetch_eco_government(server_arg)
+            except httpx.HTTPError as e:
+                err_payload = {"view": "error", "message": f"Could not reach Eco server: {e}"}
+                return CallToolResult(
+                    content=[
+                        TextContent(type="text", text=f"**Eco server unreachable:** {e}"),
+                        TextContent(type="text", text=json.dumps(err_payload)),
+                        TextContent(type="text", text=HTMX_PREFIX + _render_error(str(e))),
+                    ],
+                    isError=True,
+                    **{"_meta": UI_META},
+                )
+            gov_payload = to_government_payload(
+                raw_gov, fetched_at_iso=datetime.now(UTC).isoformat()
+            )
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text=_format_government_markdown(gov_payload)),
+                    TextContent(type="text", text=json.dumps(gov_payload)),
+                    TextContent(
+                        type="text",
+                        text=HTMX_PREFIX + _render_government_card(gov_payload),
+                    ),
+                ],
+                **{"_meta": UI_META},
             )
 
         if name != "get_eco_server_status":

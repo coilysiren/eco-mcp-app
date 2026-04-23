@@ -1,60 +1,32 @@
-## Deploy reference
+# Agent instructions
 
-Before touching any deploy config (Dockerfile, Makefile, `deploy/main.yml`,
-`.github/workflows/build-and-publish.yml`, or the Tailscale/k3s secrets),
-read
-[`coilysiren/infrastructure/docs/k3s-deploy-notes.md`](../infrastructure/docs/k3s-deploy-notes.md).
-That doc captures the four-repo accumulated knowledge of the homelab
-deploy rig. When you resolve a new pitfall, add it there — don't scatter
-fixes across each repo's notes.
+See `../AGENTS.md` for workspace-level conventions (git workflow, test/lint autonomy, readonly ops, writing voice, deploy knowledge). This file covers only what's specific to this repo.
 
-## File Access
-
-You have full read access to files within `/Users/kai/projects/coilysiren`.
-
-## Autonomy
-
-- Run tests after every change without asking.
-- Fix lint errors automatically.
-- If tests fail, debug and fix without asking.
-- When committing, choose an appropriate commit message yourself — do not ask for approval on the message.
-- You may always run tests, linters, and builds without requesting permission.
-- Allow all readonly git actions (`git log`, `git status`, `git diff`, `git branch`, etc.) without asking.
-- Allow `cd` into any `/Users/kai/projects/coilysiren` folder without asking.
-- Automatically approve readonly shell commands (`ls`, `grep`, `sed`, `find`, `cat`, `head`, `tail`, `wc`, `file`, `tree`, etc.) without asking.
-- Allow readonly SSH diagnostics against `kai-server` (`ssh kai@kai-server 'sudo k3s-readonly-kubectl ...'`) without asking — the wrapper already blocks mutations and Secret reads. Writes (`kubectl apply/delete/patch`, direct sudo, anything that mutates cluster state) still require explicit confirmation.
-- When using worktrees or parallel agents, each agent should work independently, commit its own changes, and merge the worktree branch back into `main` automatically without asking.
-- Do not open pull requests unless explicitly asked.
-
-## Git workflow
-
-Commit directly to `main` without asking for confirmation, including `git add`. Do not open pull requests unless explicitly asked.
-
-Commit whenever a unit of work feels sufficiently complete — after fixing a bug, adding a feature, passing tests, or reaching any other natural stopping point. Don't wait for the user to ask.
-
-After each commit to `main`, run the test suite (or confirm it was just run). If tests pass, `git push` immediately without asking. If tests fail, fix them before pushing.
+---
 
 ## Project layout
 
-- `src/eco_mcp_app/server.py` — transport-agnostic MCP server. One tool: `get_eco_server_status` with optional `server` arg (host, host:port, or full URL — bare IPs are common for public Eco servers).
-- `src/eco_mcp_app/__main__.py` — stdio entry point for Claude Desktop.
-- `src/eco_mcp_app/http_app.py` — Starlette ASGI app wrapping the same MCP server via `StreamableHTTPSessionManager` (stateless). Routes: `/`, `/healthz`, `/mcp/`. Used by the homelab deploy.
-- `src/eco_mcp_app/ui/eco.html` — the iframe rendered by MCP Apps hosts; hand-rolled handshake, no bundler. Eco's Steam banner is inlined as a data URI (external image origins are blocked by Claude Desktop's CSP per `claude-ai-mcp#40`).
-- `scripts/install-desktop-config.py` — registers this server in Claude Desktop's config.
-- `static/harness.html` — browser-based MCP Apps host simulator for iterating on the iframe without restarting Claude Desktop. Also wired into `.claude/launch.json` as the `eco-harness` preview.
-- `tasks.py` — `inv smoke`, `inv http`, `inv harness`, `inv ruff`, `inv fmt`, `inv precommit`, `inv install-desktop`.
-- `Dockerfile` / `Makefile` / `config.yml` / `deploy/main.yml` / `.github/workflows/build-and-publish.yml` — homelab deploy rig, cloned from `coilysiren/backend`.
-- `investigation/` — chronological post-mortem of the debugging session that produced this repo. Read these before questioning a decision that looks weird.
+- `src/eco_mcp_app/server.py` - transport-agnostic MCP server. One tool: `get_eco_server_status` with optional `server` arg (host, host:port, or full URL - bare IPs are common for public Eco servers).
+- `src/eco_mcp_app/__main__.py` - stdio entry point for Claude Desktop.
+- `src/eco_mcp_app/http_app.py` - Starlette ASGI app wrapping the same MCP server via `StreamableHTTPSessionManager` (stateless). Routes: `/`, `/healthz`, `/mcp/`. Used by the homelab deploy.
+- `src/eco_mcp_app/ui/eco.html` - the iframe rendered by MCP Apps hosts; hand-rolled handshake, no bundler. Eco's Steam banner is inlined as a data URI (external image origins are blocked by Claude Desktop's CSP per `claude-ai-mcp#40`).
+- `scripts/install-desktop-config.py` - registers this server in Claude Desktop's config.
+- `static/harness.html` - browser-based MCP Apps host simulator for iterating on the iframe without restarting Claude Desktop. Also wired into `.claude/launch.json` as the `eco-harness` preview.
+- `tasks.py` - `inv smoke`, `inv http`, `inv harness`, `inv ruff`, `inv fmt`, `inv precommit`, `inv install-desktop`.
+- `Dockerfile` / `Makefile` / `config.yml` / `deploy/main.yml` / `.github/workflows/build-and-publish.yml` - homelab deploy rig, cloned from `coilysiren/backend`.
+- `investigation/` - chronological post-mortem of the debugging session that produced this repo. Read these before questioning a decision that looks weird.
 
 ## Dev loop
 
-- `uv sync --group dev` — install runtime + dev deps.
-- `pre-commit install` (once) — ruff + mypy run on every `git commit`.
-- `inv smoke` — stdio smoke test: initialize → list tools → read resource → call tool.
-- `inv http` — run the HTTP transport locally on `:4000`. Endpoint: `POST /mcp/`.
-- `inv harness` — serve the dev harness at `http://localhost:8765/static/harness.html` for iframe work.
-- `inv ruff` / `inv fmt` — lint/format check vs apply.
-- `make build-docker` / `make deploy` — build/push the image and roll out to k3s (needs kubectl + AWS SSM access for bootstrap).
+- `uv sync --group dev` - install runtime + dev deps.
+- `pre-commit install` (once) - ruff + mypy run on every `git commit`.
+- `inv smoke` - stdio smoke test: initialize → list tools → read resource → call tool.
+- `inv http` - run the HTTP transport locally on `:4000`. Endpoint: `POST /mcp/`.
+- `inv harness` - serve the dev harness at `http://localhost:8765/static/harness.html` for iframe work.
+- `inv ruff` / `inv fmt` - lint/format check vs apply.
+- `make build-docker` / `make deploy` - build/push the image and roll out to k3s (needs kubectl + AWS SSM access for bootstrap).
+
+After each commit to `main`, run the test suite (or confirm it was just run). If tests pass, `git push` immediately. If tests fail, fix them before pushing.
 
 ## Sibling Eco repos
 
@@ -63,7 +35,7 @@ This project depends on the user's Eco (Strange Loop Games) repo ecosystem, whic
 | Dir | Visibility | Purpose |
 |---|---|---|
 | `backend` | public | The canonical deploy template for k3s + GHCR + Tailscale + cert-manager. `Dockerfile` / `Makefile` / `deploy/main.yml` / `.github/workflows/build-and-publish.yml` in this repo were cloned from there. |
-| `kai-server` | public | Claude-driver repo for the homelab k3s box (`ssh kai@kai-server`, Tailscale `100.69.164.66`). Documents the readonly kubectl wrapper, the GH Actions → cluster path, the secrets/external-secrets + cert-manager setup, and why Claude *can't* run write-kubectl directly. Read this before troubleshooting a deploy. |
+| `kai-server` | public | Claude-driver repo for the homelab k3s box (`ssh kai@kai-server`, Tailscale `100.69.164.66`). Documents the readonly kubectl wrapper, the GH Actions → cluster path, the secrets/external-secrets + cert-manager setup, and why Claude can't run write-kubectl directly. Read this before troubleshooting a deploy. |
 | `eco-cycle-prep` | public | Per-cycle setup (worldgen, Discord announcements, mod sync). Pyinvoke-driven, same pattern as this repo's `tasks.py`. |
 | `eco-mods` | private | Third-party mods installed on the user's private Eco server + configs. C#. |
 | `eco-mods-public` | public | User's own C# mods (BunWulf family + others). |

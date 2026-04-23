@@ -42,6 +42,7 @@ from .server import (
     redact,
     to_payload,
 )
+from .telemetry import init_sentry
 
 if TYPE_CHECKING:
     from starlette.types import ASGIApp, Receive, Scope, Send
@@ -65,6 +66,7 @@ class NormalizeMcpPath:
 
 
 def create_app() -> Starlette:
+    init_sentry()
     mcp_server = build_server()
     # stateless=True: every request gets a fresh transport. Fits the tool shape
     # — each call is a one-shot /info fetch, no long-lived session state.

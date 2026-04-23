@@ -7,9 +7,11 @@ import os
 import sys
 
 from .server import serve
+from .telemetry import init_sentry
 
 
 def main() -> None:
+    init_sentry()
     # Optional RPC tee for debugging which host is talking and what it advertises.
     # Set ECO_MCP_APP_RPC_LOG to a file path; outbound JSON-RPC is appended there.
     log_path = os.environ.get("ECO_MCP_APP_RPC_LOG")

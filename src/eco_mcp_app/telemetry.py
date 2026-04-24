@@ -16,6 +16,7 @@ import os
 
 import sentry_sdk
 import sentry_sdk.integrations.fastapi as sentry_fastapi
+import sentry_sdk.integrations.logging as sentry_logging
 import sentry_sdk.integrations.starlette as sentry_starlette
 
 _initialized = False
@@ -30,9 +31,11 @@ def init_sentry() -> None:
     if dsn:
         sentry_sdk.init(
             dsn=dsn,
+            enable_logs=True,
             integrations=[
                 sentry_starlette.StarletteIntegration(),
                 sentry_fastapi.FastApiIntegration(),
+                sentry_logging.LoggingIntegration(),
             ],
         )
     else:

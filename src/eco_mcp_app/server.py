@@ -13,7 +13,6 @@ import base64
 import json
 import os
 import re
-import time
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -21,6 +20,7 @@ from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from cachetools import TTLCache
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader, PackageLoader, select_autoescape
 from markupsafe import Markup, escape
 from mcp.server.lowlevel import NotificationOptions, Server
@@ -330,22 +330,21 @@ def normalize_server_url(server: str | None) -> str:
 # stale slips through. Cache key is the normalized URL so the same server
 # expressed two ways (`host` vs `host:3001/info`) shares an entry.
 _INFO_CACHE_TTL_S = float(os.environ.get("ECO_INFO_CACHE_TTL", "30"))
-_info_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_info_cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=128, ttl=_INFO_CACHE_TTL_S)
 
 
 async def fetch_eco_info(server: str | None = None) -> dict[str, Any]:
     """Hit the Eco server /info endpoint. Raises on non-200. 30s memoized."""
     url = normalize_server_url(server)
-    now = time.monotonic()
     cached = _info_cache.get(url)
-    if cached and (now - cached[0]) < _INFO_CACHE_TTL_S:
-        return dict(cached[1])
+    if cached is not None:
+        return dict(cached)
     async with httpx.AsyncClient(timeout=5.0) as client:
         r = await client.get(url)
         r.raise_for_status()
         data: dict[str, Any] = r.json()
         data["_sourceUrl"] = url
-        _info_cache[url] = (now, dict(data))
+        _info_cache[url] = dict(data)
         return data
 
 
@@ -1228,8 +1227,9 @@ _ECO_ADMIN_SSM_PATH = os.environ.get("ECO_ADMIN_TOKEN_SSM", "/eco-mcp-app/api-ad
 
 # Admin token cache — loaded once per process at first-use, not per-request.
 # An explicit env var ECO_ADMIN_TOKEN overrides SSM so tests and local dev
-# don't need AWS credentials.
-_admin_token_cache: dict[str, str | None] = {}
+# don't need AWS credentials. TTL is effectively infinite (1 hour is plenty;
+# the process restarts more often than the SSM value rotates).
+_admin_token_cache: TTLCache[str, str | None] = TTLCache(maxsize=1, ttl=3600)
 
 
 def _load_admin_token() -> str | None:
@@ -1261,7 +1261,7 @@ def _load_admin_token() -> str | None:
 # between conversation + iframe), and each render fans out 14 admin requests —
 # without this we'd hammer the Eco server's admin endpoint.
 _ECONOMY_CACHE_TTL_S = float(os.environ.get("ECO_ECONOMY_CACHE_TTL", "45"))
-_economy_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_economy_cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=64, ttl=_ECONOMY_CACHE_TTL_S)
 
 
 async def _fetch_dataset(
@@ -1328,10 +1328,9 @@ async def fetch_economy(server: str | None = None) -> dict[str, Any]:
     base = f"{parsed.scheme}://{parsed.netloc}"
 
     cache_key = base
-    now = time.monotonic()
     cached = _economy_cache.get(cache_key)
-    if cached and (now - cached[0]) < _ECONOMY_CACHE_TTL_S:
-        return dict(cached[1])
+    if cached is not None:
+        return dict(cached)
 
     info = await fetch_eco_info(server)
     # TimeSinceStart is seconds since cycle start; some servers return a float.
@@ -1370,7 +1369,7 @@ async def fetch_economy(server: str | None = None) -> dict[str, Any]:
         "series": series,
         "admin_ok": admin_ok,
     }
-    _economy_cache[cache_key] = (now, dict(out))
+    _economy_cache[cache_key] = dict(out)
     return out
 
 

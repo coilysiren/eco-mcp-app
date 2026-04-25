@@ -29,13 +29,13 @@ import os
 import re
 import sqlite3
 import time
-from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 import httpx
+from aiolimiter import AsyncLimiter
 
 from . import _preload
 
@@ -275,21 +275,12 @@ def _cache_put(key: str, value: Any) -> None:
 
 
 # --- iNat rate limiter -----------------------------------------------------
-
-
-_INAT_WINDOW: deque[float] = deque()
-
-
-def _inat_rate_gate() -> None:
-    now = time.monotonic()
-    while _INAT_WINDOW and (now - _INAT_WINDOW[0]) > _INAT_RATE_WINDOW_S:
-        _INAT_WINDOW.popleft()
-    if len(_INAT_WINDOW) >= _INAT_RATE_MAX:
-        # Oldest request is still in the window — sleep until it ages out.
-        sleep_s = _INAT_RATE_WINDOW_S - (now - _INAT_WINDOW[0])
-        if sleep_s > 0:
-            time.sleep(sleep_s)
-    _INAT_WINDOW.append(time.monotonic())
+# AsyncLimiter is a token-bucket cousin of the previous deque-based sliding
+# window: at most _INAT_RATE_MAX requests per _INAT_RATE_WINDOW_S, and
+# `await`-ing it yields to the event loop instead of blocking it. The old
+# implementation's time.sleep() blocked the loop, which mattered when the
+# loop was also serving the dashboard's parallel iNat fan-out.
+_inat_limiter = AsyncLimiter(_INAT_RATE_MAX, _INAT_RATE_WINDOW_S)
 
 
 # --- External fetch: iNat --------------------------------------------------
@@ -309,7 +300,6 @@ async def _fetch_inat_taxon(name: str) -> dict[str, Any] | None:
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached if cached else None
-    _inat_rate_gate()
     url = f"{INAT_BASE_URL}/taxa"
     params = {
         "q": name,
@@ -319,7 +309,7 @@ async def _fetch_inat_taxon(name: str) -> dict[str, Any] | None:
         "all_names": "false",
     }
     headers = {"User-Agent": INAT_USER_AGENT}
-    async with httpx.AsyncClient(timeout=8.0) as client:
+    async with _inat_limiter, httpx.AsyncClient(timeout=8.0) as client:
         resp = await client.get(url, params=params, headers=headers)
         resp.raise_for_status()
         data = resp.json()

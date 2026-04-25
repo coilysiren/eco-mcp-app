@@ -29,13 +29,19 @@ from eco_mcp_app.species import (
 
 @pytest.fixture(autouse=True)
 def _isolate_cache_and_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Redirect the SQLite cache at a tmp dir, stub the admin key, reset rate deque."""
+    """Redirect the SQLite cache at a tmp dir, stub the admin key, reset rate limiter."""
+    from aiolimiter import AsyncLimiter
+
     monkeypatch.setenv(species_mod._CACHE_DIR_ENV, str(tmp_path))
     monkeypatch.setenv("ECO_ADMIN_API_KEY", "test-key")
     # Bypass the committed data/species_profiles.json preload — these
     # tests exercise the live iNat + Wikipedia fetch paths via respx.
     monkeypatch.setenv("ECO_MCP_PRELOAD_DISABLE", "1")
-    species_mod._INAT_WINDOW.clear()
+    # Each test gets a fresh limiter so it never sees tokens carried over
+    # from the previous test's fan-out.
+    species_mod._inat_limiter = AsyncLimiter(
+        species_mod._INAT_RATE_MAX, species_mod._INAT_RATE_WINDOW_S
+    )
 
 
 # --- Name cleaning --------------------------------------------------------

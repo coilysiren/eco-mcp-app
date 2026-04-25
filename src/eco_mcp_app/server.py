@@ -2084,12 +2084,7 @@ def build_server() -> Server:
                         _htmx_content(_render_error(str(e))),
                     ],
                     isError=True,
-                    **{
-                        "_meta": {
-                            "ui": {"resourceUri": ECONOMY_RESOURCE_URI},
-                            "ui/resourceUri": ECONOMY_RESOURCE_URI,
-                        }
-                    },
+                    **{"_meta": UI_META},
                 )
             payload = compute_economy_payload(raw)
             return CallToolResult(
@@ -2098,12 +2093,7 @@ def build_server() -> Server:
                     TextContent(type="text", text=json.dumps(payload, default=str)),
                     _htmx_content(_render_economy_card(payload)),
                 ],
-                **{
-                    "_meta": {
-                        "ui": {"resourceUri": ECONOMY_RESOURCE_URI},
-                        "ui/resourceUri": ECONOMY_RESOURCE_URI,
-                    }
-                },
+                **{"_meta": UI_META},
             )
 
         if name == "get_eco_map":

@@ -21,6 +21,7 @@ from eco_mcp_app import server as eco_server
 from eco_mcp_app.server import (
     DEFAULT_ECO_INFO_URL,
     ECONOMY_DATASETS,
+    UI_META,
     build_server,
     compute_economy_payload,
     fetch_economy,
@@ -302,6 +303,11 @@ async def test_call_get_eco_economy_returns_htmx_fragment() -> None:
     assert frag.startswith("HTMX:")
     assert "Economic health" in frag
 
+    # MCP Apps hosts read _meta to pick the iframe; success and error paths
+    # must both use the shared UI_META dict (regression: error path used a
+    # stale ECONOMY_RESOURCE_URI map, success path omitted _meta entirely).
+    assert result.root.meta == UI_META
+
 
 @pytest.mark.asyncio
 @respx.mock
@@ -319,3 +325,4 @@ async def test_call_get_eco_economy_handles_info_failure() -> None:
     assert result.root.isError is True
     blocks = result.root.content
     assert any(isinstance(b, mt.TextContent) and b.text.startswith("HTMX:") for b in blocks)
+    assert result.root.meta == UI_META

@@ -1,0 +1,17 @@
+id: mcp_streamable_endpoint_robustness
+title: The /mcp/ Streamable-HTTP endpoint stays bounded under malformed traffic
+description: >
+  The /mcp/ endpoint is the public Streamable-HTTP MCP transport,
+  stateless, and reachable cross-origin. The invariant is that
+  malformed JSON-RPC frames, oversized request bodies, mismatched
+  content types, and unexpected HTTP methods produce stable, bounded
+  responses without crashing the session manager or leaking internals.
+  A clean rejection here keeps the MCP layer trustworthy even when a
+  client sends garbage, intentionally or not.
+blockers:
+  - A POST /mcp/ with a body that is not valid JSON returns a 4xx with a structured error, not a 5xx
+  - A POST /mcp/ whose body is valid JSON but not a valid JSON-RPC envelope returns a 4xx, not a 5xx
+  - A POST /mcp/ whose body exceeds 1 MB does not exhaust memory or hang the worker; the response arrives within a bounded time window and is a 4xx or 413
+  - A request to /mcp/ with content-type other than application/json or text/event-stream returns a 4xx, not a 5xx
+  - An HTTP method other than GET/POST/DELETE on /mcp/ returns 405 or 404, not 5xx
+  - The error response for a malformed JSON-RPC frame does not include a Python traceback or internal module path

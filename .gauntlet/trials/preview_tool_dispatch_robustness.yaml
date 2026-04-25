@@ -1,0 +1,16 @@
+id: preview_tool_dispatch_robustness
+title: Tool name path parameter does not crash or leak on hostile input
+description: >
+  The /preview/{tool} route dispatches an arbitrary path segment to the
+  MCP tool registry. The invariant is that every value of {tool} - known,
+  unknown, very long, containing control characters, or colliding with
+  Starlette or framework internals - resolves to a stable, bounded
+  HTTP response. Hostile input must not crash the worker, hang the
+  request past the upstream timeout, or expose stack traces, file paths,
+  or internal module names to the caller.
+blockers:
+  - A request to /preview/<unknown_tool_name> returns a 2xx or 4xx with a bounded HTML body, not a 5xx
+  - A request whose tool path segment contains control characters (NUL, CR, LF, percent-encoded equivalents) returns a stable 4xx or rendered error page, not a 5xx
+  - A request whose tool path segment is longer than 4KB does not crash the worker and returns within the upstream timeout window
+  - The error response for an unknown or malformed tool name does not include a Python traceback, internal file path, or class name
+  - After ten consecutive hostile /preview/{tool} requests, /healthz still returns 200

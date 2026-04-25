@@ -1,0 +1,18 @@
+id: upstream_resource_exhaustion_bounds
+title: A single caller cannot exhaust the service via slow or oversized upstreams
+description: >
+  Every route that fans out to an Eco upstream (/preview, /preview-map,
+  /preview/{tool}, MCP tools that accept a server argument) holds an
+  outbound httpx connection for the duration of the upstream call. A
+  single attacker who can either point the service at a slow target or
+  open many concurrent requests to a real-but-slow target must not be
+  able to exhaust the worker pool, run the host out of memory by
+  consuming an unbounded upstream response, or stall /healthz. The
+  invariant is bounded resource use per request and graceful behaviour
+  under concurrency.
+blockers:
+  - A request whose upstream takes longer than 10 seconds is terminated by the service with a 5xx-with-stable-shape or 504, not held open indefinitely
+  - While 50 concurrent slow requests are in flight, /healthz still returns 200 within 2 seconds
+  - The service does not buffer a single upstream response larger than 10 MB into memory before returning; either the response is streamed or it is rejected with a stable error
+  - After a burst of 100 concurrent requests against the same upstream, the service recovers (subsequent /preview returns within the upstream timeout) without operator intervention
+  - The error returned for a timed-out or oversized upstream does not include a Python traceback or internal module path

@@ -1,0 +1,19 @@
+id: ssrf_outbound_fetch_isolation
+title: User-supplied server targets cannot reach internal or non-public addresses
+description: >
+  Several routes and tools accept a caller-supplied server identifier
+  (host, host:port, or full URL) which the service uses to compose an
+  outbound HTTP request to a third-party Eco server. The service must
+  treat this as untrusted input and refuse to fetch any address that is
+  not a public, internet-reachable Eco server. The invariant covers
+  cloud metadata endpoints, loopback, RFC1918 private ranges, link-local
+  ranges, non-HTTP schemes, and any redirect chain that lands on one of
+  those. Every endpoint that accepts the server argument must enforce
+  this consistently.
+blockers:
+  - A request whose server argument resolves to 169.254.169.254 (cloud metadata) is rejected without performing the outbound fetch, returning a 4xx
+  - A request whose server argument resolves to 127.0.0.1, ::1, or localhost is rejected with a 4xx
+  - A request whose server argument resolves to an RFC1918 private address (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) is rejected with a 4xx
+  - A request whose server argument uses a non-http(s) scheme (file://, gopher://, ftp://) is rejected with a 4xx and no fetch is attempted
+  - A request whose server argument follows a redirect to any of the above categories does not return the redirected response body or evidence that it was fetched
+  - The HTTP response status for a blocked target is a stable 4xx (not 5xx, not 200 with empty body) so the rejection is observable

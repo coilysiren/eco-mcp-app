@@ -1,0 +1,17 @@
+id: preview_query_arg_shape_safety
+title: Query parameters on /preview/{tool} do not destabilize the tool layer
+description: >
+  Query string parameters on /preview/{tool} are forwarded directly to
+  the MCP tool's arguments dict with no shape validation at the HTTP
+  layer. The invariant is that the dispatch layer treats this dict as
+  untrusted and produces a bounded response regardless of unexpected
+  keys, oversized values, repeated keys, or values that look like
+  injection attempts against any downstream string formatter or URL
+  composer. Tools that don't recognize a key should ignore it; tools
+  that do should validate types before use.
+blockers:
+  - A request with an unexpected query key (e.g. ?garbage=1) returns the same status class as the same request without that key
+  - A request whose query value exceeds 64KB returns a stable 4xx or bounded 2xx, not a 5xx and not a hung connection
+  - A request that repeats the same key (?name=a&name=b&name=c) does not produce a 5xx; the response is deterministic and bounded
+  - A request whose query value contains shell metacharacters or path traversal sequences (../, $(...), backticks) does not produce a response that reflects evidence of execution or filesystem access
+  - The error response for a malformed argument does not leak a Python traceback or internal module path

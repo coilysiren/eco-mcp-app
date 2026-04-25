@@ -50,4 +50,4 @@ This project depends on the user's Eco (Strange Loop Games) repo ecosystem, whic
 
 ## Adversarial testing
 
-When asked to harden this service, run it through gauntlet against `https://eco-mcp.coilysiren.me/` following `../gauntlet/docs/hardening-prompt-template.md`. The worked example at the bottom of that template is the filled-in version for this repo; replay it as-is. Authorized: Kai owns both repos.
+When asked to harden this service, run it through gauntlet against `https://eco-mcp.coilysiren.me/` following the template in the sibling `gauntlet` repo at `~/projects/coilysiren/gauntlet/docs/hardening-prompt-template.md` (Mac) or `X:/projects-x/coilysiren/gauntlet/docs/hardening-prompt-template.md` (Windows). The worked example at the bottom of that template is the filled-in version for this repo; replay it as-is. Authorized: Kai owns both repos.

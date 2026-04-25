@@ -47,3 +47,7 @@ This project depends on the user's Eco (Strange Loop Games) repo ecosystem, whic
 - MCP Apps spec (2026-01-26): https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx
 - Eco `/info` endpoint: live at `http://eco.coilysiren.me:3001/info`.
 - Relevant upstream issues: `claude-ai-mcp#71` (dual `_meta.ui.resourceUri` forms), `claude-ai-mcp#61` (handshake causes), `claude-ai-mcp#40` (CSP), `claude-ai-mcp#69` (size-changed vs documentElement).
+
+## Adversarial testing
+
+When asked to harden this service, run it through gauntlet against `https://eco-mcp.coilysiren.me/` following `../gauntlet/docs/hardening-prompt-template.md`. The worked example at the bottom of that template is the filled-in version for this repo; replay it as-is. Authorized: Kai owns both repos.

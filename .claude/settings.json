@@ -1,9 +1,17 @@
 {
-  "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "deniedMcpServers": [
-    "aws-eks",
-    "awslabs.eks-mcp-server"
-  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": ".claude/lockdown-deny.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(cat:*)",
@@ -47,6 +55,10 @@
       "Bash(bash:*)",
       "Bash(bun:*)",
       "Bash(cargo run:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(cmd:*)",
+      "Bash(cscript.exe:*)",
+      "Bash(cscript:*)",
       "Bash(dash:*)",
       "Bash(deno:*)",
       "Bash(docker:*)",
@@ -93,42 +105,43 @@
       "Bash(kubectl taint:*)",
       "Bash(kubectl uncordon:*)",
       "Bash(make:*)",
+      "Bash(mshta.exe:*)",
+      "Bash(mshta:*)",
       "Bash(node:*)",
       "Bash(nox:*)",
       "Bash(npm:*)",
       "Bash(osascript:*)",
       "Bash(perl:*)",
       "Bash(pnpm:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(powershell:*)",
+      "Bash(pwsh.exe:*)",
+      "Bash(pwsh:*)",
       "Bash(python3:*)",
       "Bash(python:*)",
+      "Bash(regsvr32.exe:*)",
+      "Bash(regsvr32:*)",
       "Bash(rsync:*)",
       "Bash(ruby:*)",
+      "Bash(rundll32.exe:*)",
+      "Bash(rundll32:*)",
       "Bash(scp:*)",
       "Bash(sh:*)",
       "Bash(ssh:*)",
       "Bash(sshfs:*)",
+      "Bash(tailscale:*)",
       "Bash(task:*)",
       "Bash(terraform:*)",
       "Bash(tflint:*)",
       "Bash(tfsec:*)",
       "Bash(tox:*)",
+      "Bash(wscript.exe:*)",
+      "Bash(wscript:*)",
       "Bash(xargs:*)",
       "Bash(yarn:*)",
-      "Bash(zsh:*)"
-    ]
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "(lsof -iTCP:4000 -sTCP:LISTEN -P 2>/dev/null | grep -q LISTEN) || (DEBUG=1 nohup uv run uvicorn eco_mcp_app.http_app:app --reload --host 0.0.0.0 --port 4000 >/tmp/eco-mcp-http.log 2>&1 &)",
-            "async": true,
-            "timeout": 10
-          }
-        ]
-      }
+      "Bash(zsh:*)",
+      "PowerShell",
+      "PowerShell(*)"
     ]
   }
 }

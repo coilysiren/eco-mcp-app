@@ -84,6 +84,30 @@ def test_info(client: TestClient) -> None:
     assert body["service"] == "eco-mcp-app"
     assert body["mcp"] == "/mcp/"
     assert body["preview"] == "/preview"
+    assert body["previewJson"] == "/preview.json"
+    # Every tool advertised has a .json sibling at the same path.
+    assert body["previewToolsJson"] == [f"{p}.json" for p in body["previewTools"]]
+
+
+@respx.mock
+def test_preview_html_links_to_json(client: TestClient) -> None:
+    route = respx.get("http://eco.example.com:3001/info").mock(
+        return_value=httpx.Response(200, json=_FAKE_INFO)
+    )
+    r = client.get("/preview", params={"server": "eco.example.com"})
+    assert r.status_code == 200
+    assert route.called
+    # Site header surfaces the .json variant of the current page, query string
+    # preserved so robots see the same view.
+    assert 'href="/preview.json?server=eco.example.com"' in r.text
+
+
+@respx.mock
+def test_preview_tool_html_links_to_tool_json(client: TestClient) -> None:
+    respx.get(DEFAULT_ECO_INFO_URL).mock(return_value=httpx.Response(200, json=_FAKE_INFO))
+    r = client.get("/preview/get_eco_server_status")
+    assert r.status_code == 200
+    assert 'href="/preview/get_eco_server_status.json"' in r.text
 
 
 @respx.mock

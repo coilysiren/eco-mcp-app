@@ -1159,6 +1159,7 @@ def _get_admin_token() -> str | None:
 def _render_shell(
     prerendered: str | None = None,
     preview_tools: list[dict[str, str]] | None = None,
+    json_url: str | None = None,
 ) -> str:
     """Render the iframe shell — what the MCP resource returns.
 
@@ -1178,6 +1179,7 @@ def _render_shell(
         steam_url=STEAM_URL,
         prerendered=Markup(prerendered) if prerendered else None,
         preview_tools=preview_tools,
+        json_url=json_url,
     )
 
 

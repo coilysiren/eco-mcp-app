@@ -133,12 +133,20 @@ def create_app() -> Starlette:
                 "mcp": "/mcp/",
                 "health": "/healthz",
                 "preview": "/preview",
+                "previewJson": "/preview.json",
+                "previewMap": "/preview-map",
+                "previewMapJson": "/preview-map.json",
                 "previewTools": [f"/preview/{name}" for name in names],
+                "previewToolsJson": [f"/preview/{name}.json" for name in names],
             }
         )
 
     async def healthz(_: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
+
+    def _json_url(path: str, request: Request) -> str:
+        qs = request.url.query
+        return f"{path}?{qs}" if qs else path
 
     async def preview(request: Request) -> HTMLResponse:
         """Render the iframe shell + Jinja2 card inline, bypassing MCP handshake."""
@@ -152,7 +160,13 @@ def create_app() -> Starlette:
             info["_fetchedAtISO"] = datetime.now(UTC).isoformat()
             fragment = _render_card(to_payload(info))
         tool_links = await _preview_tool_links()
-        return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
+        return HTMLResponse(
+            _render_shell(
+                prerendered=fragment,
+                preview_tools=tool_links,
+                json_url=_json_url("/preview.json", request),
+            )
+        )
 
     async def preview_json(request: Request) -> JSONResponse:
         server_arg = request.query_params.get("server")
@@ -174,7 +188,13 @@ def create_app() -> Starlette:
         else:
             fragment = _render_map(build_map_payload(bundle))
         tool_links = await _preview_tool_links(current="get_eco_map")
-        return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
+        return HTMLResponse(
+            _render_shell(
+                prerendered=fragment,
+                preview_tools=tool_links,
+                json_url=_json_url("/preview-map.json", request),
+            )
+        )
 
     async def preview_map_json(request: Request) -> JSONResponse:
         server_arg = request.query_params.get("server")
@@ -220,6 +240,7 @@ def create_app() -> Starlette:
             method="tools/call",
             params=mt.CallToolRequestParams(name=tool_name, arguments=args),
         )
+        json_url = _json_url(f"/preview/{tool_name}.json", request)
         try:
             result = await call_tool_handler(req)
         except Exception as e:
@@ -227,7 +248,11 @@ def create_app() -> Starlette:
                 return JSONResponse({"error": str(e)}, status_code=500)
             tool_links = await _preview_tool_links(current=tool_name)
             return HTMLResponse(
-                _render_shell(prerendered=_render_error(str(e)), preview_tools=tool_links)
+                _render_shell(
+                    prerendered=_render_error(str(e)),
+                    preview_tools=tool_links,
+                    json_url=json_url,
+                )
             )
         call_result = cast(mt.CallToolResult, result.root)
         if as_json:
@@ -245,7 +270,9 @@ def create_app() -> Starlette:
             if text.startswith(HTMX_PREFIX):
                 fragment = text[len(HTMX_PREFIX) :]
                 break
-        return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
+        return HTMLResponse(
+            _render_shell(prerendered=fragment, preview_tools=tool_links, json_url=json_url)
+        )
 
     async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
         await session_manager.handle_request(scope, receive, send)

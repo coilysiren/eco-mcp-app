@@ -14,3 +14,4 @@ build/
 # Agent/Claude isolated worktrees — each is a separate embedded git clone.
 .claude/worktrees/
 .claude/settings.local.json
+.DS_Store

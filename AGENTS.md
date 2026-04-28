@@ -51,3 +51,14 @@ This project depends on the user's Eco (Strange Loop Games) repo ecosystem, whic
 ## Adversarial testing
 
 When asked to harden this service, run it through gauntlet against `https://eco-mcp.coilysiren.me/` following the template in the sibling `gauntlet` repo at `~/projects/coilysiren/gauntlet/docs/hardening-prompt-template.md` (Mac) or `X:/projects-x/coilysiren/gauntlet/docs/hardening-prompt-template.md` (Windows). The worked example at the bottom of that template is the filled-in version for this repo; replay it as-is. Authorized: Kai owns both repos.
+
+---
+
+## Post-push follow-up (auto-schedule)
+
+Per the workspace "Default to proactive scheduling" rule: after pushing to `main`, schedule a wake-up to verify the build-publish-deploy job landed on kai-server. CI builds the docker image, pushes to ghcr.io, and rolls out a k8s deployment; total time is ~6-12 min.
+
+- **Cadence**: 720s (12 min) after push.
+- **Verify CI**: `coily gh run list --repo coilysiren/eco-mcp-app --limit 1` should show `completed/success`. Re-schedule once at +300s if in progress; surface and stop on failure.
+- **Verify rollout**: `coily kubectl --context=kai-server -n coilysiren-eco-mcp-app rollout status deployment/coilysiren-eco-mcp-app-app --timeout=2m`.
+- **Skip** for docs-only pushes.

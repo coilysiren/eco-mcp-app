@@ -61,6 +61,11 @@ jobs:
               client-key-data: ${{ secrets.K8S_CLIENT_KEY_DATA }}
           EOF
       - run: make .deploy
+      - name: rollout status
+        env:
+          NS: coilysiren-eco-mcp-app
+          DEP: coilysiren-eco-mcp-app-app
+        run: kubectl -n "$NS" rollout status deployment/"$DEP" --timeout=10m
       - name: rollout diagnostics on failure
         if: failure()
         env:

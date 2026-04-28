@@ -26,7 +26,7 @@ import mcp.types as mt
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.routing import BaseRoute, Mount, Route
 
 from .livereload import DEBUG, livereload_route
@@ -120,7 +120,10 @@ def create_app() -> Starlette:
             )
         return links
 
-    async def root(_: Request) -> JSONResponse:
+    async def root(_: Request) -> RedirectResponse:
+        return RedirectResponse(url="/preview", status_code=302)
+
+    async def service_info(_: Request) -> JSONResponse:
         tools_result = await _list_tools()
         names = sorted(t.name for t in tools_result.tools)
         return JSONResponse(
@@ -199,6 +202,7 @@ def create_app() -> Starlette:
 
     routes: list[BaseRoute] = [
         Route("/", root, methods=["GET"]),
+        Route("/info", service_info, methods=["GET"]),
         Route("/healthz", healthz, methods=["GET"]),
         Route("/preview", preview, methods=["GET"]),
         Route("/preview-map", preview_map, methods=["GET"]),

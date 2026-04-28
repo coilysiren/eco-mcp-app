@@ -71,8 +71,14 @@ def test_healthz(client: TestClient) -> None:
     assert r.json() == {"ok": True}
 
 
-def test_root(client: TestClient) -> None:
-    r = client.get("/")
+def test_root_redirects_to_preview(client: TestClient) -> None:
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/preview"
+
+
+def test_info(client: TestClient) -> None:
+    r = client.get("/info")
     assert r.status_code == 200
     body = r.json()
     assert body["service"] == "eco-mcp-app"

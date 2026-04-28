@@ -30,6 +30,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     Annotations,
     CallToolResult,
+    Icon,
     Resource,
     TextContent,
     Tool,
@@ -1639,7 +1640,10 @@ def build_server() -> Server:
     Separated from `serve()` so it can be mounted in both the stdio transport
     (Claude Desktop) and the Streamable-HTTP transport (homelab FastAPI deploy).
     """
-    server: Server = Server("eco-mcp-app")
+    server: Server = Server(
+        "eco-mcp-app",
+        icons=[Icon(src=_FAVICON_SRC, mimeType="image/x-icon")],
+    )
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -2272,6 +2276,7 @@ def build_initialization_options(server: Server) -> InitializationOptions:
     return InitializationOptions(
         server_name="eco-mcp-app",
         server_version="0.1.0",
+        icons=[Icon(src=_FAVICON_SRC, mimeType="image/x-icon")],
         capabilities=server.get_capabilities(
             notification_options=NotificationOptions(),
             experimental_capabilities={},

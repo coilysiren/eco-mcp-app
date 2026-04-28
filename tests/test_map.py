@@ -243,10 +243,9 @@ async def test_get_eco_map_call_tool_returns_rendered_fragment() -> None:
     )
     result = await handler(req)
     blocks = result.root.content
-    assert len(blocks) == 3
+    assert len(blocks) == 2
     assert isinstance(blocks[0], mt.TextContent)
     assert isinstance(blocks[1], mt.TextContent)
-    assert isinstance(blocks[2], mt.TextContent)
     # Markdown block summarizes deeds/owners.
     md = blocks[0].text
     assert "**2**" in md  # the deed count in bold
@@ -257,9 +256,9 @@ async def test_get_eco_map_call_tool_returns_rendered_fragment() -> None:
     assert "gifDataUri" not in payload
     assert payload["view"] == "eco_map"
     assert payload["deedCount"] == 2
-    # HTMX block carries the rendered partial with both polygons + image.
-    fragment = blocks[2].text
-    assert fragment.startswith("HTMX:")
+    # Rendered partial (with polygons + image) ships in `_meta.ui.fragment`.
+    assert result.root.meta is not None
+    fragment = result.root.meta["ui"]["fragment"]
     assert "<polygon" in fragment
     assert "data:image/gif;base64" in fragment
     assert "alice" in fragment

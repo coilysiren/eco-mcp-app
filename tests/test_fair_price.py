@@ -355,16 +355,16 @@ async def test_tool_registered_and_calls_through(monkeypatch: pytest.MonkeyPatch
     )
     result = await call_handler(req)
     blocks = result.root.content
-    assert len(blocks) == 3
+    assert len(blocks) == 2
     assert isinstance(blocks[0], mt.TextContent)
     assert isinstance(blocks[1], mt.TextContent)
-    assert isinstance(blocks[2], mt.TextContent)
     assert "copper" in blocks[0].text.lower()
     payload = _json.loads(blocks[1].text)
     assert payload["view"] == "fair_price"
     assert payload["seriesId"] == "PCOPPUSDM"
-    assert blocks[2].text.startswith("HTMX:")
-    assert "fair-price-card" in blocks[2].text
+    assert result.root.meta is not None
+    fragment = result.root.meta["ui"]["fragment"]
+    assert "fair-price-card" in fragment
 
 
 @pytest.mark.asyncio

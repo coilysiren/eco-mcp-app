@@ -269,16 +269,16 @@ async def test_call_tool_get_eco_government_happy_path() -> None:
     )
     result = await handler(req)
     blocks = result.root.content
-    assert len(blocks) == 3
+    assert len(blocks) == 2
     for b in blocks:
         assert isinstance(b, mt.TextContent)
     md = blocks[0].text
     payload = json.loads(blocks[1].text)
-    html = blocks[2].text
+    assert result.root.meta is not None
+    html = result.root.meta["ui"]["fragment"]
     assert "Steamtide Cay Foundation" in md
     assert "Scuba Steve" in md
     assert payload["scope"] == "Steamtide Cay Foundation"
-    assert html.startswith("HTMX:")
     assert "Scuba Steve" in html
     assert "No active elections" in html
     # Markup tokens must be scrubbed in the rendered HTML law preview.

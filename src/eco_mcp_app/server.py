@@ -28,7 +28,6 @@ from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    Annotations,
     CallToolResult,
     Icon,
     Resource,
@@ -125,25 +124,27 @@ UI_META: dict[str, Any] = {
     "ui/resourceUri": RESOURCE_URI,
 }
 
-# Prefix used on the text content block that carries the Jinja2-rendered HTML
-# fragment, so the iframe JS can find it without mistaking the markdown
-# fallback or the JSON payload for the render source.
+# Legacy prefix from when the rendered HTML was shipped as a `TextContent`
+# block. Kept exported because http_app's preview path and older tests still
+# import it. The widget HTML now travels in `_meta.ui.fragment` instead - see
+# `_ui_meta()` and the iframe handshake in `templates/eco.html`. The prior
+# attempt to hide the block from the model with `audience=["user"]` (commit
+# 7542e67) caused Claude Desktop to drop the block from the iframe payload
+# entirely (issue #6), so the bytes had to move off the content array.
 HTMX_PREFIX = "HTMX:"
 
-# The widget HTML is meant for the MCP Apps iframe, not the model. Tagging the
-# block audience=["user"] tells compliant clients to hide it from the LLM;
-# Claude Desktop's handshake reads it by prefix (templates/eco.html) and is
-# unaffected. Without this, reasoning-only clients hand the model 50KB+ of
-# inlined-image HTML per tool call and exhaust the context window.
-_WIDGET_AUDIENCE = Annotations(audience=["user"])
 
+def _ui_meta(fragment: str | None = None) -> dict[str, Any]:
+    """Build the per-call `_meta` block, optionally carrying the widget HTML.
 
-def _htmx_content(fragment: str) -> TextContent:
-    return TextContent(
-        type="text",
-        text=HTMX_PREFIX + fragment,
-        annotations=_WIDGET_AUDIENCE,
-    )
+    `_meta` is host-scoped and not forwarded to the model, so this keeps the
+    50KB+ of inlined-image HTML out of the LLM context while still reaching
+    the MCP Apps iframe.
+    """
+    if fragment is None:
+        return UI_META
+    ui = {**UI_META["ui"], "fragment": fragment}
+    return {**UI_META, "ui": ui}
 
 
 # Eco server descriptions use TextMeshPro-style rich-text markup (the game is
@@ -2028,9 +2029,8 @@ def build_server() -> Server:
                 content=[
                     TextContent(type="text", text="\n".join(md_lines)),
                     TextContent(type="text", text=json.dumps(card_dict)),
-                    _htmx_content(_render_ecopedia(card_dict)),
                 ],
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_ecopedia(card_dict))},
             )
 
         if name == "get_eco_crafting_atlas":
@@ -2047,19 +2047,17 @@ def build_server() -> Server:
                     content=[
                         TextContent(type="text", text=f"**Eco exporter unreachable:** {e}"),
                         TextContent(type="text", text=json.dumps(err_payload)),
-                        _htmx_content(_render_error(str(e))),
                     ],
                     isError=True,
-                    **{"_meta": UI_META},
+                    **{"_meta": _ui_meta(_render_error(str(e)))},
                 )
             ctx = atlas_template_context(atlas)
             return CallToolResult(
                 content=[
                     TextContent(type="text", text=_format_crafting_markdown(ctx)),
                     TextContent(type="text", text=json.dumps(atlas.to_dict())),
-                    _htmx_content(_render_crafting_atlas(ctx)),
                 ],
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_crafting_atlas(ctx))},
             )
 
         if name == "list_public_eco_servers":
@@ -2086,19 +2084,17 @@ def build_server() -> Server:
                     content=[
                         TextContent(type="text", text=f"**Eco server unreachable:** {e}"),
                         TextContent(type="text", text=json.dumps(err_payload)),
-                        _htmx_content(_render_error(str(e))),
                     ],
                     isError=True,
-                    **{"_meta": UI_META},
+                    **{"_meta": _ui_meta(_render_error(str(e)))},
                 )
             payload = compute_economy_payload(raw)
             return CallToolResult(
                 content=[
                     TextContent(type="text", text=_format_economy_markdown(payload)),
                     TextContent(type="text", text=json.dumps(payload, default=str)),
-                    _htmx_content(_render_economy_card(payload)),
                 ],
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_economy_card(payload))},
             )
 
         if name == "get_eco_map":
@@ -2111,10 +2107,9 @@ def build_server() -> Server:
                     content=[
                         TextContent(type="text", text=f"**Eco server unreachable:** {e}"),
                         TextContent(type="text", text=json.dumps(err_payload)),
-                        _htmx_content(_render_error(str(e))),
                     ],
                     isError=True,
-                    **{"_meta": UI_META},
+                    **{"_meta": _ui_meta(_render_error(str(e)))},
                 )
             payload = build_map_payload(bundle)
             json_payload = {k: v for k, v in payload.items() if k != "gifDataUri"}
@@ -2122,9 +2117,8 @@ def build_server() -> Server:
                 content=[
                     TextContent(type="text", text=_format_map_markdown(payload)),
                     TextContent(type="text", text=json.dumps(json_payload)),
-                    _htmx_content(_render_map(payload)),
                 ],
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_map(payload))},
             )
 
         if name == "get_eco_ecoregion":
@@ -2143,18 +2137,16 @@ def build_server() -> Server:
                     content=[
                         TextContent(type="text", text=f"**Eco worldlayers unreachable:** {e}"),
                         TextContent(type="text", text=json.dumps(err_payload)),
-                        _htmx_content(_render_error(str(e))),
                     ],
                     isError=True,
-                    **{"_meta": UI_META},
+                    **{"_meta": _ui_meta(_render_error(str(e)))},
                 )
             return CallToolResult(
                 content=[
                     TextContent(type="text", text=_format_ecoregion_markdown(payload)),
                     TextContent(type="text", text=json.dumps(payload)),
-                    _htmx_content(_render_ecoregion_card(payload)),
                 ],
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_ecoregion_card(payload))},
             )
 
         if name == "get_eco_species":
@@ -2168,19 +2160,17 @@ def build_server() -> Server:
                     content=[
                         TextContent(type="text", text=f"**Species fetch failed:** {e}"),
                         TextContent(type="text", text=json.dumps(err_payload)),
-                        _htmx_content(_render_error(str(e))),
                     ],
                     isError=True,
-                    **{"_meta": UI_META},
+                    **{"_meta": _ui_meta(_render_error(str(e)))},
                 )
             species_payload = species_payload_obj.to_dict()
             return CallToolResult(
                 content=[
                     TextContent(type="text", text=_format_species_markdown(species_payload)),
                     TextContent(type="text", text=json.dumps(species_payload)),
-                    _htmx_content(_render_species_card(species_payload)),
                 ],
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_species_card(species_payload))},
             )
 
         if name == "get_eco_government":
@@ -2193,10 +2183,9 @@ def build_server() -> Server:
                     content=[
                         TextContent(type="text", text=f"**Eco server unreachable:** {e}"),
                         TextContent(type="text", text=json.dumps(err_payload)),
-                        _htmx_content(_render_error(str(e))),
                     ],
                     isError=True,
-                    **{"_meta": UI_META},
+                    **{"_meta": _ui_meta(_render_error(str(e)))},
                 )
             gov_payload = to_government_payload(
                 raw_gov, fetched_at_iso=datetime.now(UTC).isoformat()
@@ -2205,9 +2194,8 @@ def build_server() -> Server:
                 content=[
                     TextContent(type="text", text=_format_government_markdown(gov_payload)),
                     TextContent(type="text", text=json.dumps(gov_payload)),
-                    _htmx_content(_render_government_card(gov_payload)),
                 ],
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_government_card(gov_payload))},
             )
 
         if name == "fair_price":
@@ -2221,10 +2209,9 @@ def build_server() -> Server:
                 content=[
                     TextContent(type="text", text=result.narrative),
                     TextContent(type="text", text=json.dumps(payload)),
-                    _htmx_content(fragment),
                 ],
                 isError=is_error,
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(fragment)},
             )
 
         if name not in ("get_eco_server_status", "get_eco_milestones"):
@@ -2239,10 +2226,9 @@ def build_server() -> Server:
                 content=[
                     TextContent(type="text", text=f"**Eco server unreachable:** {e}"),
                     TextContent(type="text", text=json.dumps(err_payload)),
-                    _htmx_content(_render_error(str(e))),
                 ],
                 isError=True,
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_error(str(e)))},
             )
 
         info = redact(raw)
@@ -2254,9 +2240,8 @@ def build_server() -> Server:
                 content=[
                     TextContent(type="text", text=_format_milestones_markdown(milestones_payload)),
                     TextContent(type="text", text=json.dumps(milestones_payload)),
-                    _htmx_content(_render_milestones(milestones_payload)),
                 ],
-                **{"_meta": UI_META},
+                **{"_meta": _ui_meta(_render_milestones(milestones_payload))},
             )
 
         payload = to_payload(info)
@@ -2264,9 +2249,8 @@ def build_server() -> Server:
             content=[
                 TextContent(type="text", text=_format_markdown(payload)),
                 TextContent(type="text", text=json.dumps(payload)),
-                _htmx_content(_render_card(payload)),
             ],
-            **{"_meta": UI_META},
+            **{"_meta": _ui_meta(_render_card(payload))},
         )
 
     return server

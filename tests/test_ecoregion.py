@@ -316,14 +316,13 @@ async def test_mcp_tool_call_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None
     )
     result = await handler(req)
     blocks = result.root.content
-    assert len(blocks) == 3
+    assert len(blocks) == 2
     assert isinstance(blocks[0], mt.TextContent)
     assert isinstance(blocks[1], mt.TextContent)
-    assert isinstance(blocks[2], mt.TextContent)
     md = blocks[0].text
     payload = json.loads(blocks[1].text)
-    fragment = blocks[2].text
+    assert result.root.meta is not None
+    fragment = result.root.meta["ui"]["fragment"]
     assert "Biome composition" in md
     assert payload["view"] == "eco_ecoregion"
-    assert fragment.startswith("HTMX:")
     assert "ecoregion" in fragment

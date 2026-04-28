@@ -265,11 +265,17 @@ def create_app() -> Starlette:
             return JSONResponse(payload)
         tool_links = await _preview_tool_links(current=tool_name)
         fragment = ""
-        for block in call_result.content:
-            text = getattr(block, "text", "") or ""
-            if text.startswith(HTMX_PREFIX):
-                fragment = text[len(HTMX_PREFIX) :]
-                break
+        ui_meta = (call_result.meta or {}).get("ui") if call_result.meta else None
+        if isinstance(ui_meta, dict):
+            meta_fragment = ui_meta.get("fragment")
+            if isinstance(meta_fragment, str):
+                fragment = meta_fragment
+        if not fragment:
+            for block in call_result.content:
+                text = getattr(block, "text", "") or ""
+                if text.startswith(HTMX_PREFIX):
+                    fragment = text[len(HTMX_PREFIX) :]
+                    break
         return HTMLResponse(
             _render_shell(prerendered=fragment, preview_tools=tool_links, json_url=json_url)
         )

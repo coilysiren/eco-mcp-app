@@ -180,16 +180,15 @@ async def test_explain_eco_item_tool_wraps_card() -> None:
     )
     result = await handler(req)
     blocks = result.root.content
-    assert len(blocks) == 3
+    assert len(blocks) == 2
     assert isinstance(blocks[0], mt.TextContent)
     assert isinstance(blocks[1], mt.TextContent)
-    assert isinstance(blocks[2], mt.TextContent)
     md = blocks[0].text
     payload = json.loads(blocks[1].text)
-    fragment = blocks[2].text
+    assert result.root.meta is not None
+    fragment = result.root.meta["ui"]["fragment"]
     assert "iron" in md.lower()
     assert payload["title"].lower() == "iron"
-    assert fragment.startswith("HTMX:")
     assert "Atomic number" in fragment
 
 

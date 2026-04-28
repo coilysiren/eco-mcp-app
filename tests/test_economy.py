@@ -284,11 +284,11 @@ async def test_call_get_eco_economy_returns_htmx_fragment() -> None:
     )
     result = await handler(req)
     blocks = result.root.content
-    assert len(blocks) == 3
-    # Block 0: markdown fallback. Block 1: JSON. Block 2: HTMX HTML fragment.
+    assert len(blocks) == 2
+    # Block 0: markdown fallback. Block 1: JSON. HTML fragment now lives on
+    # `_meta.ui.fragment` so the LLM never sees the inlined-image bytes.
     assert isinstance(blocks[0], mt.TextContent)
     assert isinstance(blocks[1], mt.TextContent)
-    assert isinstance(blocks[2], mt.TextContent)
 
     # Markdown mentions the narrative health.
     assert "economic health" in blocks[0].text.lower()
@@ -298,15 +298,12 @@ async def test_call_get_eco_economy_returns_htmx_fragment() -> None:
     assert payload["health"] in {"healthy", "booming", "stressed"}
     assert payload["kpis"]["trades_total"] == 524
 
-    # HTMX fragment starts with the prefix and contains the card markup.
-    frag = blocks[2].text
-    assert frag.startswith("HTMX:")
-    assert "Economic health" in frag
-
-    # MCP Apps hosts read _meta to pick the iframe; success and error paths
-    # must both use the shared UI_META dict (regression: error path used a
-    # stale ECONOMY_RESOURCE_URI map, success path omitted _meta entirely).
-    assert result.root.meta == UI_META
+    # MCP Apps iframe reads the rendered card from `_meta.ui.fragment`.
+    meta = result.root.meta
+    assert meta is not None
+    assert meta["ui"]["resourceUri"] == UI_META["ui"]["resourceUri"]
+    assert meta["ui/resourceUri"] == UI_META["ui/resourceUri"]
+    assert "Economic health" in meta["ui"]["fragment"]
 
 
 @pytest.mark.asyncio
@@ -321,8 +318,10 @@ async def test_call_get_eco_economy_handles_info_failure() -> None:
         params=mt.CallToolRequestParams(name="get_eco_economy", arguments={}),
     )
     result = await handler(req)
-    # Error path: isError=True, still emits an HTMX error partial.
+    # Error path: isError=True, still emits an HTML error partial via _meta.
     assert result.root.isError is True
-    blocks = result.root.content
-    assert any(isinstance(b, mt.TextContent) and b.text.startswith("HTMX:") for b in blocks)
-    assert result.root.meta == UI_META
+    meta = result.root.meta
+    assert meta is not None
+    assert meta["ui"]["resourceUri"] == UI_META["ui"]["resourceUri"]
+    assert isinstance(meta["ui"]["fragment"], str)
+    assert meta["ui"]["fragment"]

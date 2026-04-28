@@ -17,7 +17,6 @@ import respx
 from eco_mcp_app import server as eco_server
 from eco_mcp_app.server import (
     DEFAULT_ECO_INFO_URL,
-    HTMX_PREFIX,
     build_milestones_payload,
     build_server,
     parse_achievement,
@@ -146,21 +145,20 @@ async def test_call_get_eco_milestones_happy_path() -> None:
     )
     result = await handler(req)
     blocks = result.root.content
-    assert len(blocks) == 3
+    assert len(blocks) == 2
     for b in blocks:
         assert isinstance(b, mt.TextContent)
 
-    md, json_block, html_block = blocks
+    md, json_block = blocks
     assert isinstance(md, mt.TextContent)
     assert isinstance(json_block, mt.TextContent)
-    assert isinstance(html_block, mt.TextContent)
     assert "TotalCulture" in md.text
     payload = json.loads(json_block.text)
     assert payload["view"] == "eco_milestones"
     assert len(payload["milestones"]) == 5
-    # HTML fragment prefixed for the iframe JS to find it.
-    assert html_block.text.startswith(HTMX_PREFIX)
-    html = html_block.text[len(HTMX_PREFIX) :]
+    # HTML fragment now travels in `_meta.ui.fragment`, off the content array.
+    assert result.root.meta is not None
+    html = result.root.meta["ui"]["fragment"]
     # Top-line total culture rendered.
     assert "166.6" in html
     # Markup stripped — no Eco inline tags leak into rendered HTML.
@@ -188,9 +186,8 @@ async def test_call_get_eco_milestones_empty_achievements() -> None:
         params=mt.CallToolRequestParams(name="get_eco_milestones", arguments={}),
     )
     result = await handler(req)
-    blocks = result.root.content
-    assert isinstance(blocks[2], mt.TextContent)
-    html = blocks[2].text[len(HTMX_PREFIX) :]
+    assert result.root.meta is not None
+    html = result.root.meta["ui"]["fragment"]
     # Empty state copy, not a crash.
     assert "No milestones" in html or "no milestones" in html.lower()
 

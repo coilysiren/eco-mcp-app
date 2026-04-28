@@ -285,14 +285,14 @@ async def test_tool_call_returns_three_text_blocks(
     )
     result = await handler(req)
     blocks = result.root.content
-    assert len(blocks) == 3
+    assert len(blocks) == 2
     assert isinstance(blocks[0], mt.TextContent)
     md = blocks[0].text
     assert "Crafting atlas" in md
     assert "Adobe" in md  # prettified AdobeItem
-    # HTML fragment is on block 2 with the HTMX: prefix.
-    assert blocks[2].text.startswith("HTMX:")
-    assert "crafting-atlas" in blocks[2].text
+    # HTML fragment ships in `_meta.ui.fragment`.
+    assert result.root.meta is not None
+    assert "crafting-atlas" in result.root.meta["ui"]["fragment"]
 
 
 @pytest.mark.asyncio

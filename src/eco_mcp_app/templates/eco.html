@@ -108,10 +108,17 @@
 
   // ---- HTMX-driven rendering ----
   // Server renders the card as a server-side Jinja2 template and ships the
-  // rendered HTML as a text content block in the tool result (prefixed
-  // `HTMX:`). We swap it into #root, then call htmx.process() so HTMX wires
-  // up any attributes in the fragment. No hand-written DOM templating in JS.
+  // rendered HTML on `_meta.ui.fragment` (host-scoped, never reaches the
+  // model). We swap it into #root, then call htmx.process() so HTMX wires up
+  // any attributes in the fragment. No hand-written DOM templating in JS.
+  //
+  // Older servers shipped the same HTML as an `HTMX:`-prefixed text content
+  // block; we still scan for that as a fallback so an older server paired
+  // with this iframe still renders.
   function extractHtmlFragment(result) {
+    const meta = result && result._meta;
+    const ui = meta && meta.ui;
+    if (ui && typeof ui.fragment === "string") return ui.fragment;
     const blocks = (result && result.content) || [];
     for (const b of blocks) {
       if (b && b.type === "text" && typeof b.text === "string"

@@ -111,6 +111,37 @@ def test_preview_handles_upstream_error(client: TestClient) -> None:
 
 
 @respx.mock
+def test_preview_json_returns_payload(client: TestClient) -> None:
+    respx.get(DEFAULT_ECO_INFO_URL).mock(return_value=httpx.Response(200, json=_FAKE_INFO))
+    r = client.get("/preview.json")
+    assert r.status_code == 200
+    body = r.json()
+    # Payload shape comes from to_payload(); just sanity-check it's structured
+    # data, not HTML, and that redaction still applies.
+    assert isinstance(body, dict)
+    assert "alice" not in r.text
+    assert "<html" not in r.text.lower()
+
+
+@respx.mock
+def test_preview_json_upstream_error(client: TestClient) -> None:
+    respx.get(DEFAULT_ECO_INFO_URL).mock(side_effect=httpx.ConnectError("refused"))
+    r = client.get("/preview.json")
+    assert r.status_code == 502
+    assert "error" in r.json()
+
+
+@respx.mock
+def test_preview_tool_json_suffix(client: TestClient) -> None:
+    respx.get(DEFAULT_ECO_INFO_URL).mock(return_value=httpx.Response(200, json=_FAKE_INFO))
+    r = client.get("/preview/get_eco_server_status.json")
+    assert r.status_code == 200
+    body = r.json()
+    assert isinstance(body, dict)
+    assert "<html" not in r.text.lower()
+
+
+@respx.mock
 def test_preview_forwards_server_arg(client: TestClient) -> None:
     route = respx.get("http://eco.example.com:5679/info").mock(
         return_value=httpx.Response(200, json=_FAKE_INFO)

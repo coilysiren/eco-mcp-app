@@ -16,10 +16,11 @@ the templates without going through the MCP Apps handshake.
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import mcp.types as mt
@@ -153,6 +154,16 @@ def create_app() -> Starlette:
         tool_links = await _preview_tool_links()
         return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
 
+    async def preview_json(request: Request) -> JSONResponse:
+        server_arg = request.query_params.get("server")
+        try:
+            raw = await fetch_eco_info(server_arg)
+        except httpx.HTTPError as e:
+            return JSONResponse({"error": str(e)}, status_code=502)
+        info = redact(raw)
+        info["_fetchedAtISO"] = datetime.now(UTC).isoformat()
+        return JSONResponse(to_payload(info))
+
     async def preview_map(request: Request) -> HTMLResponse:
         """Render the iframe shell with the map card inline — dev preview."""
         server_arg = request.query_params.get("server")
@@ -165,7 +176,29 @@ def create_app() -> Starlette:
         tool_links = await _preview_tool_links(current="get_eco_map")
         return HTMLResponse(_render_shell(prerendered=fragment, preview_tools=tool_links))
 
-    async def preview_tool(request: Request) -> HTMLResponse:
+    async def preview_map_json(request: Request) -> JSONResponse:
+        server_arg = request.query_params.get("server")
+        try:
+            bundle = await fetch_map_bundle(server_arg)
+        except httpx.HTTPError as e:
+            return JSONResponse({"error": str(e)}, status_code=502)
+        return JSONResponse(build_map_payload(bundle))
+
+    def _extract_json_block(call_result: mt.CallToolResult) -> Any:
+        # Each tool emits markdown + JSON + HTMX TextContent blocks (see
+        # server.call_tool). Find the JSON one by skipping HTMX and trying
+        # to parse each remaining text block; first that parses wins.
+        for block in call_result.content:
+            text = getattr(block, "text", "") or ""
+            if text.startswith(HTMX_PREFIX):
+                continue
+            try:
+                return json.loads(text)
+            except (ValueError, TypeError):
+                continue
+        return None
+
+    async def preview_tool(request: Request) -> HTMLResponse | JSONResponse:
         """Dispatch any MCP tool by name and splice its HTMX fragment into the shell.
 
         Query-string args are passed straight through as the tool's `arguments`,
@@ -174,21 +207,38 @@ def create_app() -> Starlette:
         box. Tools that produce no HTMX fragment (e.g. list_public_eco_servers)
         render the empty iframe shell — still useful as a signal that the tool
         was reachable.
+
+        A `.json` suffix on the tool name (`/preview/get_eco_species.json?...`)
+        returns the tool's JSON content block instead of the HTML shell. Same
+        dispatch path, different output.
         """
-        tool_name = request.path_params["tool"]
+        raw_name = request.path_params["tool"]
+        as_json = raw_name.endswith(".json")
+        tool_name = raw_name[: -len(".json")] if as_json else raw_name
         args = dict(request.query_params)
         req = mt.CallToolRequest(
             method="tools/call",
             params=mt.CallToolRequestParams(name=tool_name, arguments=args),
         )
-        tool_links = await _preview_tool_links(current=tool_name)
         try:
             result = await call_tool_handler(req)
         except Exception as e:
+            if as_json:
+                return JSONResponse({"error": str(e)}, status_code=500)
+            tool_links = await _preview_tool_links(current=tool_name)
             return HTMLResponse(
                 _render_shell(prerendered=_render_error(str(e)), preview_tools=tool_links)
             )
         call_result = cast(mt.CallToolResult, result.root)
+        if as_json:
+            payload = _extract_json_block(call_result)
+            if payload is None:
+                return JSONResponse(
+                    {"error": f"tool '{tool_name}' did not return a JSON content block"},
+                    status_code=404,
+                )
+            return JSONResponse(payload)
+        tool_links = await _preview_tool_links(current=tool_name)
         fragment = ""
         for block in call_result.content:
             text = getattr(block, "text", "") or ""
@@ -205,7 +255,9 @@ def create_app() -> Starlette:
         Route("/info", service_info, methods=["GET"]),
         Route("/healthz", healthz, methods=["GET"]),
         Route("/preview", preview, methods=["GET"]),
+        Route("/preview.json", preview_json, methods=["GET"]),
         Route("/preview-map", preview_map, methods=["GET"]),
+        Route("/preview-map.json", preview_map_json, methods=["GET"]),
         Route("/preview/{tool}", preview_tool, methods=["GET"]),
         Mount("/mcp", app=handle_mcp),
     ]
